@@ -42,5 +42,30 @@ PYTHONIOENCODING=utf-8 python3 scripts/mine_run.py --start-level 1 --max-levels 
 - AutoCombat mod 自动打怪，脚本只管敲石头
 - 血量低或体力不足自动warp回Farm
 
+## 重启游戏（加载新DLL时需要）
+```powershell
+# 1. 关掉游戏
+Get-Process StardewModdingAPI -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 3
+
+# 2. 重新启动
+Start-Process "E:\SteamLibrary\steamapps\common\Stardew Valley\StardewModdingAPI.exe"
+```
+启动后需要手动进存档（或等里奈操作），然后轮询等待 worldReady：
+```bash
+# 3. 等待游戏就绪
+until curl -s http://localhost:7842/status 2>/dev/null | grep -q '"worldReady":true'; do sleep 5; done
+echo "Game ready!"
+```
+
+## 卡住检测
+每次操作后检查 /state 的 activeMenu 字段：
+- `activeMenu` 不是 null → 有对话框/菜单弹出来了，你卡住了
+- 用 `/key confirm` 推进对话
+- 对话可能有多页，反复调 `/key confirm` 直到 activeMenu 变回 null
+
+## git 同步
+代码更新后先 `git pull`，如果 DLL 变了就重启游戏。
+
 ## 参考
 完整技能文档见 scripts/SKILLS.md
