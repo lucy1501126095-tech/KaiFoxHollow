@@ -16,12 +16,18 @@ using StardewValley.Buildings;
 using StardewValley.TerrainFeatures;
 using StardewValley.Tools;
 using Microsoft.Xna.Framework.Input;
+using StardewValley.Menus;
+using System.Runtime.InteropServices;
 using xTile.Dimensions;
+using StardewValley.Monsters;
 
 namespace NagiBridge;
 
 public class ModEntry : Mod
 {
+    [DllImport("user32.dll")] private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+    private const uint KEYEVENTF_KEYUP = 0x0002;
+
     private HttpListener? _listener;
     private CancellationTokenSource? _cts;
     private readonly Queue<Action> _mainThreadQueue = new();
@@ -403,12 +409,14 @@ public class ModEntry : Mod
                 "/give" => HandleGive(ctx),
                 "/money" => HandleMoney(ctx),
                 "/refill" => HandleRefill(),
+                "/heal" => HandleHeal(),
                 "/ripen" => HandleRipen(ctx),
                 "/sell" => HandleSell(ctx),
                 "/harvest" => HandleHarvest(ctx),
                 "/store" => HandleStore(ctx),
                 "/chest" => HandleChest(ctx),
                 "/placechest" => HandlePlaceChest(ctx),
+                "/fishbot" => HandleFishbot(ctx),
                 _ => throw new InvalidOperationException($"Unknown endpoint: {path}")
             };
 
@@ -720,11 +728,22 @@ public class ModEntry : Mod
             };
         }
 
-        var eventInfo = loc.currentEvent != null ? new
+        var eventInfo = (object?)null;
+        if (loc.currentEvent != null)
         {
-            id = loc.currentEvent.id,
-            skippable = loc.currentEvent.skippable
-        } : (object?)null;
+            var ev = loc.currentEvent;
+            string? evDialogue = null;
+            if (Game1.activeClickableMenu is DialogueBox evDb)
+            {
+                try { evDialogue = evDb.getCurrentString(); } catch { }
+            }
+            eventInfo = new
+            {
+                id = ev.id,
+                skippable = ev.skippable,
+                message = evDialogue
+            };
+        }
 
         return new
         {
@@ -878,10 +897,15 @@ public class ModEntry : Mod
             }
         }
 
-        // Also include NPCs and other farmers in range
         var nearbyNpcs = loc.characters
-            .Where(n => Math.Abs(n.TilePoint.X - cx) <= radius && Math.Abs(n.TilePoint.Y - cy) <= radius)
+            .Where(n => !(n is Monster) && Math.Abs(n.TilePoint.X - cx) <= radius && Math.Abs(n.TilePoint.Y - cy) <= radius)
             .Select(n => new { name = n.Name, x = n.TilePoint.X, y = n.TilePoint.Y })
+            .ToList();
+
+        var nearbyMonsters = loc.characters
+            .OfType<Monster>()
+            .Where(m => Math.Abs(m.TilePoint.X - cx) <= radius && Math.Abs(m.TilePoint.Y - cy) <= radius)
+            .Select(m => new { name = m.Name, x = m.TilePoint.X, y = m.TilePoint.Y, health = m.Health, maxHealth = m.MaxHealth })
             .ToList();
 
         var nearbyFarmers = Game1.getOnlineFarmers()
@@ -898,6 +922,7 @@ public class ModEntry : Mod
             location = loc.Name,
             tiles,
             npcs = nearbyNpcs,
+            monsters = nearbyMonsters,
             farmers = nearbyFarmers
         };
     }
@@ -1487,20 +1512,41 @@ public class ModEntry : Mod
                     {
                         case "confirm":
                         case "action":
-                            if (Game1.activeClickableMenu != null)
+                            if (Game1.activeClickableMenu is DialogueBox dialogueBox)
+                            {
+                                dialogueBox.receiveLeftClick(0, 0);
+                            }
+                            else if (Game1.activeClickableMenu != null)
                             {
                                 Game1.activeClickableMenu.receiveLeftClick(
-                                    Game1.getMouseX(), Game1.getMouseY());
+                                    Game1.activeClickableMenu.xPositionOnScreen + Game1.activeClickableMenu.width / 2,
+                                    Game1.activeClickableMenu.yPositionOnScreen + Game1.activeClickableMenu.height / 2);
                             }
                             else if (Game1.currentLocation?.currentEvent != null)
                             {
-                                Game1.currentLocation.currentEvent.skipped = true;
-                                Game1.currentLocation.currentEvent.skipEvent();
+                                Game1.currentLocation.currentEvent.receiveActionPress(0, 0);
                             }
                             else if (Game1.input != null)
                             {
                                 Game1.pressActionButton(Game1.input.GetKeyboardState(), Game1.input.GetMouseState(),
                                     Game1.input.GetGamePadState());
+                            }
+                            break;
+                        case "ok":
+                            if (Game1.activeClickableMenu != null)
+                            {
+                                var okBtn = Game1.activeClickableMenu.GetType()
+                                    .GetField("okButton", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)?
+                                    .GetValue(Game1.activeClickableMenu) as ClickableTextureComponent;
+                                if (okBtn != null)
+                                {
+                                    Game1.activeClickableMenu.receiveLeftClick(
+                                        okBtn.bounds.Center.X, okBtn.bounds.Center.Y);
+                                }
+                                else
+                                {
+                                    Game1.activeClickableMenu.exitThisMenu();
+                                }
                             }
                             break;
                         case "cancel":
@@ -1513,9 +1559,26 @@ public class ModEntry : Mod
                             break;
                         case "skip":
                         case "escape":
-                            Game1.currentMinigame?.receiveKeyPress(Keys.Escape);
-                            if (Game1.activeClickableMenu != null)
-                                Game1.activeClickableMenu.receiveKeyPress(Keys.Escape);
+                            if (Game1.currentLocation?.currentEvent != null)
+                            {
+                                Game1.currentLocation.currentEvent.skipped = true;
+                                Game1.currentLocation.currentEvent.skipEvent();
+                            }
+                            else
+                            {
+                                Game1.currentMinigame?.receiveKeyPress(Keys.Escape);
+                                if (Game1.activeClickableMenu != null)
+                                    Game1.activeClickableMenu.receiveKeyPress(Keys.Escape);
+                            }
+                            break;
+                        default:
+                            if (key.ToLower().StartsWith("f") && int.TryParse(key.Substring(1), out int fNum) && fNum >= 1 && fNum <= 12)
+                            {
+                                byte vk = (byte)(0x70 + fNum - 1); // VK_F1=0x70
+                                keybd_event(vk, 0, 0, UIntPtr.Zero);
+                                System.Threading.Thread.Sleep(50);
+                                keybd_event(vk, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                            }
                             break;
                     }
                 }
@@ -1792,6 +1855,22 @@ public class ModEntry : Mod
         return tcs.Task.GetAwaiter().GetResult();
     }
 
+    private object HandleHeal()
+    {
+        if (!Context.IsWorldReady)
+            throw new InvalidOperationException("World not ready");
+
+        var tcs = new TaskCompletionSource<object>();
+        EnqueueMainThread(() =>
+        {
+            var f = Game1.player;
+            f.health = f.maxHealth;
+            f.Stamina = f.MaxStamina;
+            tcs.SetResult(new { ok = true, health = f.health, stamina = f.Stamina });
+        });
+        return tcs.Task.GetAwaiter().GetResult();
+    }
+
     private object HandleRipen(HttpListenerContext ctx)
     {
         if (!Context.IsWorldReady)
@@ -1878,6 +1957,100 @@ public class ModEntry : Mod
     {
         _timeFrozen = false;
         return new { ok = true, action = "resumed" };
+    }
+
+    private object HandleFishbot(HttpListenerContext ctx)
+    {
+        var p = ReadJson(ctx);
+        var action = GetParamOr(p, "action", "toggle"); // on, off, toggle, status
+
+        var tcs = new TaskCompletionSource<object>();
+        EnqueueMainThread(() =>
+        {
+            try
+            {
+                // Find Fishbot mod via SMAPI mod registry
+                object? fishbotMod = null;
+                System.Reflection.FieldInfo? autoField = null;
+
+                var modInfo = this.Helper.ModRegistry.Get("AdroSlice.Fishbot");
+                if (modInfo != null)
+                {
+                    var modInfoType = modInfo.GetType();
+                    var modProp = modInfoType.GetProperty("Mod",
+                        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic |
+                        System.Reflection.BindingFlags.Instance);
+                    fishbotMod = modProp?.GetValue(modInfo);
+                    if (fishbotMod == null)
+                    {
+                        var modField = modInfoType.GetField("Mod",
+                            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic |
+                            System.Reflection.BindingFlags.Instance);
+                        fishbotMod = modField?.GetValue(modInfo);
+                    }
+                }
+
+                if (fishbotMod == null)
+                {
+                    tcs.SetResult(new { ok = false, error = "Fishbot mod not found" });
+                    return;
+                }
+
+                // Find AutomationEnabled field/property
+                var fbType = fishbotMod.GetType();
+                autoField = fbType.GetField("AutomationEnabled",
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic |
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static);
+
+                var autoProp = fbType.GetProperty("AutomationEnabled",
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic |
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static);
+
+                var bindingAll = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic |
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static;
+
+                if (autoField != null || autoProp != null)
+                {
+                    bool current = autoField != null
+                        ? (bool)autoField.GetValue(fishbotMod)!
+                        : (bool)autoProp!.GetValue(fishbotMod)!;
+                    bool target = action == "toggle" ? !current : action == "on";
+
+                    if (action != "status")
+                    {
+                        if (autoField != null) autoField.SetValue(fishbotMod, target);
+                        else autoProp!.SetValue(fishbotMod, target);
+
+                        if (target)
+                        {
+                            var startMethod = fbType.GetMethod("StartCasting", bindingAll);
+                            startMethod?.Invoke(fishbotMod, null);
+                        }
+                        else
+                        {
+                            var resetMethod = fbType.GetMethod("reset", bindingAll)
+                                ?? fbType.GetMethod("Reset", bindingAll);
+                            resetMethod?.Invoke(fishbotMod, null);
+                        }
+                    }
+                    tcs.SetResult(new { ok = true, enabled = action == "status" ? current : target });
+                }
+                else
+                {
+                    // List all fields for debugging
+                    var fields = fbType.GetFields(
+                        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic |
+                        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static);
+                    var names = string.Join(", ", fields.Select(f => f.Name));
+                    tcs.SetResult(new { ok = false, error = $"AutomationEnabled not found. Fields: {names}" });
+                }
+            }
+            catch (Exception ex)
+            {
+                tcs.SetResult(new { ok = false, error = ex.Message });
+            }
+        });
+        return tcs.Task.GetAwaiter().GetResult();
     }
 
     private Vector2 GetFacingTile(Farmer farmer)

@@ -121,9 +121,9 @@ class MineBot:
         hp, max_hp = self.player_hp()
         return (hp / max_hp * 100) if max_hp > 0 else 0
 
-    def stamina_val(self):
-        sta, _ = self.player_stamina()
-        return sta
+    def stamina_pct(self):
+        sta, max_sta = self.player_stamina()
+        return (sta / max_sta * 100) if max_sta > 0 else 0
 
     def game_time(self):
         s = self.state()
@@ -131,12 +131,12 @@ class MineBot:
 
     def is_safe(self, hp_threshold):
         hp_ok = self.hp_pct() >= hp_threshold
-        sta_ok = self.stamina_val() >= 15
+        sta_ok = self.stamina_pct() >= 15
         time_ok = self.game_time() < 2300
         if not hp_ok:
             log(f"  hp too low ({self.hp_pct():.0f}%)")
         if not sta_ok:
-            log(f"  stamina too low ({self.stamina_val()})")
+            log(f"  stamina too low ({self.stamina_pct():.0f}%)")
         if not time_ok:
             log(f"  too late ({self.game_time()}), time to go home")
         return hp_ok and sta_ok and time_ok
