@@ -156,8 +156,46 @@ class ChatOverlay:
         if not text:
             return
         self.input_var.set("")
-        self.inbox.append({"sender": "里奈", "text": text, "time": time.time()})
+        msg = {"sender": "里奈", "text": text, "time": time.time()}
+        self.inbox.append(msg)
         self.show_message("里奈", text)
+        self._write_inbox_file(msg)
+
+    def _write_inbox_file(self, msg):
+        import os, subprocess
+        inbox_path = os.path.expanduser("~/nagi/overlay_inbox.jsonl")
+        os.makedirs(os.path.dirname(inbox_path), exist_ok=True)
+        with open(inbox_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(msg, ensure_ascii=False) + "\n")
+        self._poke_terminal()
+
+    def _poke_terminal(self):
+        """Send 'o\\n' to CC terminal window to trigger UserPromptSubmit hook."""
+        try:
+            def find_cc_terminal():
+                result = [None]
+                def cb(hwnd, _):
+                    if win32gui.IsWindowVisible(hwnd):
+                        cls = win32gui.GetClassName(hwnd)
+                        if cls == "CASCADIA_HOSTING_WINDOW_CLASS":
+                            title = win32gui.GetWindowText(hwnd)
+                            if "Stardew" not in title:
+                                result[0] = hwnd
+                                return False
+                    return True
+                try:
+                    win32gui.EnumWindows(cb, None)
+                except:
+                    pass
+                return result[0]
+
+            hwnd = find_cc_terminal()
+            if hwnd:
+                win32gui.PostMessage(hwnd, win32con.WM_CHAR, ord("o"), 0)
+                win32gui.PostMessage(hwnd, win32con.WM_CHAR, ord("k"), 0)
+                win32gui.PostMessage(hwnd, win32con.WM_KEYDOWN, 0x0D, 0)
+        except Exception:
+            pass
 
     def _sender_color(self, sender):
         s = sender.lower()
