@@ -126,6 +126,49 @@ def refill_water():
     return _post("/refill")
 
 
+def menu():
+    return _get("/menu")
+
+
+def menu_click(option=None, button=None, x=None, y=None):
+    data = {}
+    if option is not None: data["option"] = option
+    if button is not None: data["button"] = button
+    if x is not None: data["x"] = x
+    if y is not None: data["y"] = y
+    return _post("/menu/click", data)
+
+
+def craft(name, count=1):
+    return _post("/craft", {"name": name, "count": count})
+
+
+def machines():
+    return _get("/machines")
+
+
+def animals():
+    return _get("/animals")
+
+
+def warp(location, x=None, y=None):
+    data = {"location": location}
+    if x is not None: data["x"] = x
+    if y is not None: data["y"] = y
+    return _post("/warp", data)
+
+
+def sell(name=None, sell_all=False):
+    data = {}
+    if name: data["name"] = name
+    if sell_all: data["all"] = True
+    return _post("/sell", data)
+
+
+def key(k, count=1):
+    return _post("/key", {"key": k, "count": count})
+
+
 def wait_tool_animation(seconds=0.6):
     """Wait for tool animation to finish."""
     time.sleep(seconds)

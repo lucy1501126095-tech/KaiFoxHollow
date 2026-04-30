@@ -417,6 +417,11 @@ public class ModEntry : Mod
                 "/chest" => HandleChest(ctx),
                 "/placechest" => HandlePlaceChest(ctx),
                 "/fishbot" => HandleFishbot(ctx),
+                "/menu" => HandleMenu(),
+                "/menu/click" => HandleMenuClick(ctx),
+                "/craft" => HandleCraft(ctx),
+                "/machines" => HandleMachines(),
+                "/animals" => HandleAnimals(),
                 _ => throw new InvalidOperationException($"Unknown endpoint: {path}")
             };
 
@@ -2044,6 +2049,414 @@ public class ModEntry : Mod
                     var names = string.Join(", ", fields.Select(f => f.Name));
                     tcs.SetResult(new { ok = false, error = $"AutomationEnabled not found. Fields: {names}" });
                 }
+            }
+            catch (Exception ex)
+            {
+                tcs.SetResult(new { ok = false, error = ex.Message });
+            }
+        });
+        return tcs.Task.GetAwaiter().GetResult();
+    }
+
+    private object HandleMenu()
+    {
+        var tcs = new TaskCompletionSource<object>();
+        EnqueueMainThread(() =>
+        {
+            try
+            {
+                var menu = Game1.activeClickableMenu;
+                if (menu == null)
+                {
+                    object? eventInfo = null;
+                    if (Game1.currentLocation?.currentEvent != null)
+                    {
+                        var ev = Game1.currentLocation.currentEvent;
+                        eventInfo = new { id = ev.id, skippable = ev.skippable };
+                    }
+                    tcs.SetResult(new { ok = true, open = false, activeEvent = eventInfo });
+                    return;
+                }
+
+                var menuType = menu.GetType().Name;
+                string? dialogue = null;
+                List<object>? responses = null;
+                List<object>? shopItems = null;
+                List<object>? buttons = null;
+
+                if (menu is DialogueBox db)
+                {
+                    try { dialogue = db.getCurrentString(); } catch { }
+
+                    var responseField = typeof(DialogueBox).GetField("responseCC",
+                        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic |
+                        System.Reflection.BindingFlags.Instance);
+                    var responseCCs = responseField?.GetValue(db) as List<ClickableComponent>;
+
+                    var responsesField = typeof(DialogueBox).GetField("responses",
+                        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic |
+                        System.Reflection.BindingFlags.Instance);
+                    var responseList = responsesField?.GetValue(db) as List<Response>;
+
+                    if (responseList != null && responseList.Count > 0)
+                    {
+                        responses = new List<object>();
+                        for (int i = 0; i < responseList.Count; i++)
+                        {
+                            var r = responseList[i];
+                            responses.Add(new
+                            {
+                                index = i,
+                                key = r.responseKey,
+                                text = r.responseText,
+                                bounds = responseCCs != null && i < responseCCs.Count
+                                    ? new { x = responseCCs[i].bounds.X, y = responseCCs[i].bounds.Y,
+                                            w = responseCCs[i].bounds.Width, h = responseCCs[i].bounds.Height }
+                                    : null
+                            });
+                        }
+                    }
+                }
+                else if (menu is ShopMenu shop)
+                {
+                    shopItems = new List<object>();
+                    var forSale = shop.forSale;
+                    var itemPriceAndStock = shop.itemPriceAndStock;
+                    foreach (var item in forSale)
+                    {
+                        int price = 0;
+                        int stock = -1;
+                        if (itemPriceAndStock.TryGetValue(item, out var info))
+                        {
+                            price = info.Price;
+                            stock = info.Stock;
+                        }
+                        shopItems.Add(new
+                        {
+                            name = item.DisplayName,
+                            id = item.QualifiedItemId,
+                            price,
+                            stock
+                        });
+                    }
+                }
+
+                // Collect named buttons via reflection
+                buttons = new List<object>();
+                foreach (var fieldName in new[] { "okButton", "cancelButton", "backButton",
+                    "forwardButton", "upperRightCloseButton", "trashCan" })
+                {
+                    var field = menu.GetType().GetField(fieldName,
+                        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic |
+                        System.Reflection.BindingFlags.Instance);
+                    var comp = field?.GetValue(menu) as ClickableComponent;
+                    if (comp != null && comp.visible)
+                    {
+                        buttons.Add(new
+                        {
+                            name = fieldName,
+                            x = comp.bounds.Center.X,
+                            y = comp.bounds.Center.Y
+                        });
+                    }
+                }
+
+                tcs.SetResult(new
+                {
+                    ok = true,
+                    open = true,
+                    type = menuType,
+                    dialogue,
+                    responses,
+                    shopItems,
+                    buttons = buttons.Count > 0 ? buttons : null
+                });
+            }
+            catch (Exception ex)
+            {
+                tcs.SetResult(new { ok = false, error = ex.Message });
+            }
+        });
+        return tcs.Task.GetAwaiter().GetResult();
+    }
+
+    private object HandleMenuClick(HttpListenerContext ctx)
+    {
+        var p = ReadJson(ctx);
+        var option = GetParamOr(p, "option", -1);
+        var button = GetParamOr(p, "button", "");
+        var clickX = GetParamOr(p, "x", -1);
+        var clickY = GetParamOr(p, "y", -1);
+
+        var tcs = new TaskCompletionSource<object>();
+        EnqueueMainThread(() =>
+        {
+            try
+            {
+                var menu = Game1.activeClickableMenu;
+                if (menu == null)
+                {
+                    tcs.SetResult(new { ok = false, error = "No menu open" });
+                    return;
+                }
+
+                if (option >= 0 && menu is DialogueBox db)
+                {
+                    var responseField = typeof(DialogueBox).GetField("responseCC",
+                        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic |
+                        System.Reflection.BindingFlags.Instance);
+                    var responseCCs = responseField?.GetValue(db) as List<ClickableComponent>;
+
+                    if (responseCCs != null && option < responseCCs.Count)
+                    {
+                        var rc = responseCCs[option];
+                        db.receiveLeftClick(rc.bounds.Center.X, rc.bounds.Center.Y);
+                        tcs.SetResult(new { ok = true, clicked = "response", option });
+                    }
+                    else
+                    {
+                        tcs.SetResult(new { ok = false, error = $"Response index {option} out of range" });
+                    }
+                    return;
+                }
+
+                if (button != "")
+                {
+                    var field = menu.GetType().GetField(button == "ok" ? "okButton" :
+                                                        button == "cancel" ? "cancelButton" :
+                                                        button == "back" ? "backButton" :
+                                                        button == "forward" ? "forwardButton" :
+                                                        button == "close" ? "upperRightCloseButton" :
+                                                        button,
+                        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic |
+                        System.Reflection.BindingFlags.Instance);
+                    var comp = field?.GetValue(menu) as ClickableComponent;
+                    if (comp != null)
+                    {
+                        menu.receiveLeftClick(comp.bounds.Center.X, comp.bounds.Center.Y);
+                        tcs.SetResult(new { ok = true, clicked = "button", button });
+                    }
+                    else
+                    {
+                        tcs.SetResult(new { ok = false, error = $"Button '{button}' not found" });
+                    }
+                    return;
+                }
+
+                if (clickX >= 0 && clickY >= 0)
+                {
+                    menu.receiveLeftClick(clickX, clickY);
+                    tcs.SetResult(new { ok = true, clicked = "position", x = clickX, y = clickY });
+                    return;
+                }
+
+                menu.receiveLeftClick(
+                    menu.xPositionOnScreen + menu.width / 2,
+                    menu.yPositionOnScreen + menu.height / 2);
+                tcs.SetResult(new { ok = true, clicked = "center" });
+            }
+            catch (Exception ex)
+            {
+                tcs.SetResult(new { ok = false, error = ex.Message });
+            }
+        });
+        return tcs.Task.GetAwaiter().GetResult();
+    }
+
+    private object HandleCraft(HttpListenerContext ctx)
+    {
+        if (!Context.IsWorldReady)
+            throw new InvalidOperationException("World not ready");
+
+        var p = ReadJson(ctx);
+        var name = GetParam<string>(p, "name");
+        var count = GetParamOr(p, "count", 1);
+
+        var tcs = new TaskCompletionSource<object>();
+        EnqueueMainThread(() =>
+        {
+            try
+            {
+                var farmer = Game1.player;
+                var recipes = CraftingRecipe.craftingRecipes;
+                if (!recipes.ContainsKey(name))
+                {
+                    var known = farmer.craftingRecipes.Keys.ToList();
+                    tcs.SetResult(new { ok = false, error = $"Recipe '{name}' not found",
+                        knownRecipes = known });
+                    return;
+                }
+
+                if (!farmer.craftingRecipes.ContainsKey(name))
+                {
+                    tcs.SetResult(new { ok = false, error = $"Player hasn't learned recipe '{name}'" });
+                    return;
+                }
+
+                var recipe = new CraftingRecipe(name, false);
+                int crafted = 0;
+                var missing = new Dictionary<string, int>();
+
+                for (int i = 0; i < count; i++)
+                {
+                    if (!recipe.doesFarmerHaveIngredientsInInventory())
+                    {
+                        foreach (var kvp in recipe.recipeList)
+                        {
+                            var ingredientId = kvp.Key;
+                            var needed = kvp.Value;
+                            var have = 0;
+                            foreach (var item in farmer.Items)
+                            {
+                                if (item != null && (item.ParentSheetIndex.ToString() == ingredientId
+                                    || item.Category.ToString() == ingredientId))
+                                    have += item.Stack;
+                            }
+                            if (have < needed)
+                            {
+                                var ingredientName = ingredientId;
+                                try { ingredientName = new StardewValley.Object(ingredientId, 1).DisplayName; } catch { }
+                                missing[ingredientName] = needed - have;
+                            }
+                        }
+                        break;
+                    }
+                    recipe.consumeIngredients(null);
+                    var product = recipe.createItem();
+                    if (!farmer.addItemToInventoryBool(product))
+                    {
+                        Game1.createItemDebris(product, farmer.getStandingPosition(), farmer.FacingDirection);
+                        tcs.SetResult(new { ok = true, crafted = crafted + 1,
+                            warning = "Inventory full, item dropped" });
+                        return;
+                    }
+                    crafted++;
+                }
+
+                if (crafted == 0)
+                    tcs.SetResult(new { ok = false, error = "Missing materials", missing });
+                else if (crafted < count)
+                    tcs.SetResult(new { ok = true, crafted, requested = count,
+                        warning = "Ran out of materials", missing });
+                else
+                    tcs.SetResult(new { ok = true, crafted });
+            }
+            catch (Exception ex)
+            {
+                tcs.SetResult(new { ok = false, error = ex.Message });
+            }
+        });
+        return tcs.Task.GetAwaiter().GetResult();
+    }
+
+    private object HandleMachines()
+    {
+        if (!Context.IsWorldReady)
+            throw new InvalidOperationException("World not ready");
+
+        var tcs = new TaskCompletionSource<object>();
+        EnqueueMainThread(() =>
+        {
+            try
+            {
+                var loc = Game1.player.currentLocation;
+                var machines = new List<object>();
+
+                foreach (var pair in loc.objects.Pairs)
+                {
+                    var obj = pair.Value;
+                    if (!obj.bigCraftable.Value) continue;
+
+                    string status;
+                    if (obj.readyForHarvest.Value)
+                        status = "ready";
+                    else if (obj.heldObject.Value != null || obj.MinutesUntilReady > 0)
+                        status = "processing";
+                    else
+                        status = "empty";
+
+                    var entry = new Dictionary<string, object?>
+                    {
+                        ["name"] = obj.Name,
+                        ["x"] = (int)pair.Key.X,
+                        ["y"] = (int)pair.Key.Y,
+                        ["status"] = status,
+                        ["minutesLeft"] = obj.MinutesUntilReady
+                    };
+
+                    if (obj.heldObject.Value != null)
+                    {
+                        entry["heldItem"] = obj.heldObject.Value.Name;
+                        entry["heldItemId"] = obj.heldObject.Value.QualifiedItemId;
+                    }
+
+                    machines.Add(entry);
+                }
+
+                tcs.SetResult(new
+                {
+                    ok = true,
+                    location = loc.Name,
+                    count = machines.Count,
+                    machines
+                });
+            }
+            catch (Exception ex)
+            {
+                tcs.SetResult(new { ok = false, error = ex.Message });
+            }
+        });
+        return tcs.Task.GetAwaiter().GetResult();
+    }
+
+    private object HandleAnimals()
+    {
+        if (!Context.IsWorldReady)
+            throw new InvalidOperationException("World not ready");
+
+        var tcs = new TaskCompletionSource<object>();
+        EnqueueMainThread(() =>
+        {
+            try
+            {
+                var loc = Game1.player.currentLocation;
+                var animals = new List<object>();
+
+                IEnumerable<FarmAnimal>? animalList = null;
+                if (loc is Farm farm)
+                    animalList = farm.animals.Values;
+                else if (loc is AnimalHouse ah)
+                    animalList = ah.animals.Values;
+
+                if (animalList != null)
+                {
+                    foreach (var a in animalList)
+                    {
+                        animals.Add(new
+                        {
+                            name = a.Name,
+                            type = a.type.Value,
+                            x = a.TilePoint.X,
+                            y = a.TilePoint.Y,
+                            wasPetToday = a.wasPet.Value,
+                            friendship = a.friendshipTowardFarmer.Value,
+                            happiness = a.happiness.Value,
+                            fullness = a.fullness.Value,
+                            age = a.age.Value,
+                            home = a.home?.indoors.Value?.Name,
+                            product = a.currentProduce.Value,
+                            productReady = a.currentProduce.Value != null && a.currentProduce.Value != "-1"
+                        });
+                    }
+                }
+
+                tcs.SetResult(new
+                {
+                    ok = true,
+                    location = loc.Name,
+                    count = animals.Count,
+                    animals
+                });
             }
             catch (Exception ex)
             {
