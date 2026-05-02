@@ -44,13 +44,14 @@ public sealed class MermaidBot
 
     private void ClickShell(int shellNumber)
     {
-        object? show = Game1.currentMinigame ?? Game1.currentLocation;
+        object? show = (object?)Game1.currentMinigame ?? Game1.currentLocation;
         if (this.InvokeShellMethod(show, shellNumber))
             return;
 
         Rectangle bounds = this.GetShellBounds(shellNumber);
         Game1.currentMinigame?.receiveLeftClick(bounds.Center.X, bounds.Center.Y, playSound: true);
-        Game1.currentLocation?.receiveLeftClick(bounds.Center.X + Game1.viewport.X, bounds.Center.Y + Game1.viewport.Y, playSound: true);
+        Game1.currentLocation?.GetType().GetMethod("receiveLeftClick", Members)
+            ?.Invoke(Game1.currentLocation, new object[] { bounds.Center.X + Game1.viewport.X, bounds.Center.Y + Game1.viewport.Y, true });
     }
 
     private bool InvokeShellMethod(object? target, int shellNumber)
@@ -81,7 +82,7 @@ public sealed class MermaidBot
 
     private Rectangle GetShellBounds(int shellNumber)
     {
-        object? show = Game1.currentMinigame ?? Game1.currentLocation;
+        object? show = (object?)Game1.currentMinigame ?? Game1.currentLocation;
         foreach (string fieldName in new[] { "shells", "shellButtons", "shellComponents" })
         {
             object? value = show?.GetType().GetField(fieldName, Members)?.GetValue(show);

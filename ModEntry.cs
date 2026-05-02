@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -21,7 +21,7 @@ using StardewValley.Menus;
 using System.Runtime.InteropServices;
 using xTile.Dimensions;
 using StardewValley.Monsters;
-using HarmonyLib;
+using StardewValley.Minigames;
 
 namespace NagiBridge;
 
@@ -53,34 +53,15 @@ public class ModEntry : Mod
     private bool _timeFrozen;
     private int _frozenTime;
 
-    // Journey of the Prairie King bot state
-    private bool _minigameBotActive;
-    private string? _minigameBotLastError;
-    private int _minigameBotErrorCooldown;
-    private Vector2 _minigameBotLastMove;
-    private readonly HashSet<byte> _pkHeldKeys = new();
-    private bool _pkHarmonyPatched;
-    internal static int[] PkBotMoveDirections = Array.Empty<int>();
-    internal static int[] PkBotShootDirections = Array.Empty<int>();
-    internal static bool PkBotInjecting;
+    private readonly PrairieKingBot _prairieKingBot = new();
 
-    private static Type? _abigailGameType;
-    private static Type? _abigailGameReflectedType;
-    private static FieldInfo? _pkPlayerPositionField;
-    private static FieldInfo? _pkPlayerBoundingBoxField;
-    private static FieldInfo? _pkPlayerMovementDirectionsField;
-    private static FieldInfo? _pkPlayerShootingDirectionsField;
-    private static FieldInfo? _pkMonstersField;
-    private static FieldInfo? _pkBulletsField;
-    private static FieldInfo? _pkPowerupsField;
-    private static FieldInfo? _pkShoppingField;
-    private static FieldInfo? _pkDeathTimerField;
-    private static FieldInfo? _pkBetweenWaveTimerField;
-    private static FieldInfo? _pkGameOverField;
-    private static FieldInfo? _pkLivesField;
-    private static FieldInfo? _pkCoinsField;
-    private static FieldInfo? _pkWhichWaveField;
-    private static readonly Dictionary<string, FieldInfo?> _pkObjectFieldCache = new();
+    private readonly FlowerDanceBot _flowerDanceBot = new();
+    private readonly LuauBot _luauBot = new();
+    private readonly WinterStarBot _winterStarBot = new();
+    private readonly MermaidBot _mermaidBot = new();
+    private readonly SpiritsEveBot _spiritsEveBot = new();
+    private readonly SpinningWheelBot _spinningWheelBot = new();
+    private readonly EggHuntBot _eggHuntBot = new();
 
     public override void Entry(IModHelper helper)
     {
@@ -115,62 +96,36 @@ public class ModEntry : Mod
         if (_timeFrozen && Context.IsWorldReady)
             Game1.timeOfDay = _frozenTime;
 
-        // Auto-start bot when Prairie King is detected
-        if (IsPrairieKing(Game1.currentMinigame))
-        {
-            if (!_minigameBotActive)
-            {
-                _minigameBotActive = true;
-                _minigameBotLastError = null;
-                Monitor.Log("Prairie King detected — bot auto-started", LogLevel.Info);
-            }
-            if (!_pkHarmonyPatched)
-            {
-                try
-                {
-                    var harmony = new Harmony("NagiBridge.PrairieKingBot");
-                    var agType = Game1.currentMinigame!.GetType();
-                    var updateInput = agType.GetMethod("_UpdateInput", BindingFlags.NonPublic | BindingFlags.Instance)
-                        ?? agType.GetMethod("UpdateInput", BindingFlags.NonPublic | BindingFlags.Instance);
-                    if (updateInput != null)
-                    {
-                        harmony.Patch(updateInput, postfix: new HarmonyMethod(typeof(ModEntry), nameof(PkUpdateInputPostfix)));
-                        Monitor.Log($"Harmony patched {updateInput.Name} for bot input injection", LogLevel.Info);
-                    }
-                    else
-                        Monitor.Log("Could not find _UpdateInput method to patch", LogLevel.Warn);
-                    _pkHarmonyPatched = true;
-                }
-                catch (Exception ex)
-                {
-                    Monitor.Log($"Harmony patch failed: {ex.Message}", LogLevel.Error);
-                    _pkHarmonyPatched = true;
-                }
-            }
-            try
-            {
-                TickPrairieKingBot(Game1.currentMinigame!);
-            }
-            catch (Exception ex)
-            {
-                _minigameBotLastError = ex.Message;
-                if (_minigameBotErrorCooldown <= 0)
-                {
-                    Monitor.Log($"Prairie King bot error: {ex}", LogLevel.Warn);
-                    _minigameBotErrorCooldown = 300;
-                }
-            }
-        }
-        else if (_minigameBotActive)
-        {
-            _minigameBotActive = false;
-            PkBotInjecting = false;
-            PkBotMoveDirections = Array.Empty<int>();
-            PkBotShootDirections = Array.Empty<int>();
-        }
+        _prairieKingBot.Update(Monitor);
 
-        if (_minigameBotErrorCooldown > 0)
-            _minigameBotErrorCooldown--;
+        if (Context.IsWorldReady && Game1.player != null)
+        {
+            GameTime time = Game1.currentGameTime;
+            _mermaidBot.Update(time);
+
+            if (Game1.currentSeason.Equals("spring", StringComparison.OrdinalIgnoreCase))
+            {
+                if (Game1.dayOfMonth == 13)
+                    _eggHuntBot.Update(time);
+                else if (Game1.dayOfMonth == 24)
+                    _flowerDanceBot.Update(time);
+            }
+            else if (Game1.currentSeason.Equals("summer", StringComparison.OrdinalIgnoreCase) && Game1.dayOfMonth == 11)
+            {
+                _luauBot.Update(time);
+            }
+            else if (Game1.currentSeason.Equals("fall", StringComparison.OrdinalIgnoreCase))
+            {
+                if (Game1.dayOfMonth == 16)
+                    _spinningWheelBot.Update(time);
+                else if (Game1.dayOfMonth == 27)
+                    _spiritsEveBot.Update(time);
+            }
+            else if (Game1.currentSeason.Equals("winter", StringComparison.OrdinalIgnoreCase) && Game1.dayOfMonth == 25)
+            {
+                _winterStarBot.Update(time);
+            }
+        }
 
         // Process pathfinding movement
         if (_pathQueue != null && _pathQueue.Count > 0 && Context.IsWorldReady)
@@ -512,6 +467,10 @@ public class ModEntry : Mod
                 "/craft" => HandleCraft(ctx),
                 "/machines" => HandleMachines(),
                 "/animals" => HandleAnimals(),
+                "/scan" => HandleScan(),
+                "/festival" => HandleFestival(),
+                "/festival/interact" => HandleFestivalInteract(ctx),
+                "/festival/answer" => HandleFestivalAnswer(ctx),
                 _ => throw new InvalidOperationException($"Unknown endpoint: {path}")
             };
 
@@ -2176,7 +2135,7 @@ public class ModEntry : Mod
         {
             try
             {
-                tcs.SetResult(BuildPrairieKingState());
+                tcs.SetResult(_prairieKingBot.BuildState());
             }
             catch (Exception ex)
             {
@@ -2196,19 +2155,13 @@ public class ModEntry : Mod
         {
             try
             {
-                var minigame = Game1.currentMinigame;
-                var inPrairieKing = IsPrairieKing(minigame);
-
                 switch (action)
                 {
                     case "start":
-                        _minigameBotActive = true;
-                        _minigameBotLastError = null;
+                        _prairieKingBot.Start();
                         break;
                     case "stop":
-                        _minigameBotActive = false;
-                        if (inPrairieKing)
-                            ClearPrairieKingInput(minigame!);
+                        _prairieKingBot.Stop();
                         break;
                     case "status":
                         break;
@@ -2220,11 +2173,11 @@ public class ModEntry : Mod
                 tcs.SetResult(new
                 {
                     ok = true,
-                    active = _minigameBotActive,
-                    inPrairieKing,
-                    currentMinigame = minigame?.GetType().FullName,
-                    lastMove = new { x = _minigameBotLastMove.X, y = _minigameBotLastMove.Y },
-                    lastError = _minigameBotLastError
+                    active = _prairieKingBot.IsActive,
+                    inPrairieKing = PrairieKingBot.IsPrairieKing(Game1.currentMinigame),
+                    currentMinigame = Game1.currentMinigame?.GetType().FullName,
+                    lastMove = new { x = _prairieKingBot.LastMove.X, y = _prairieKingBot.LastMove.Y },
+                    lastError = _prairieKingBot.LastError
                 });
             }
             catch (Exception ex)
@@ -2234,607 +2187,6 @@ public class ModEntry : Mod
         });
         return tcs.Task.GetAwaiter().GetResult();
     }
-
-    private object BuildPrairieKingState()
-    {
-        var minigame = Game1.currentMinigame;
-        if (!IsPrairieKing(minigame))
-        {
-            return new
-            {
-                ok = true,
-                active = false,
-                botActive = _minigameBotActive,
-                currentMinigame = minigame?.GetType().FullName
-            };
-        }
-
-        EnsurePrairieKingReflection(minigame!);
-        var playerBounds = ReadPrairieKingPlayerBounds(minigame!);
-        var monsters = ReadPrairieKingMonsters(minigame!);
-        var bullets = ReadPrairieKingBullets(minigame!);
-        var powerups = ReadPrairieKingPowerups(minigame!);
-
-        return new
-        {
-            ok = true,
-            active = true,
-            botActive = _minigameBotActive,
-            currentMinigame = minigame!.GetType().FullName,
-            flags = new
-            {
-                shopping = IsPrairieKingShopping(minigame),
-                death = IsPrairieKingDeathState(minigame),
-                betweenWaves = IsPrairieKingBetweenWaves(minigame, monsters.Count),
-                gameOver = ReadBoolField(minigame, _pkGameOverField)
-            },
-            player = new
-            {
-                x = playerBounds.Center.X,
-                y = playerBounds.Center.Y,
-                bounds = new { playerBounds.X, playerBounds.Y, playerBounds.Width, playerBounds.Height },
-                lives = ReadIntField(minigame, _pkLivesField, -1),
-                coins = ReadIntField(minigame, _pkCoinsField, -1),
-                wave = ReadIntField(minigame, _pkWhichWaveField, -1)
-            },
-            counts = new { monsters = monsters.Count, bullets = bullets.Count, powerups = powerups.Count },
-            monsters = monsters.Select(m => new
-            {
-                x = m.Bounds.Center.X,
-                y = m.Bounds.Center.Y,
-                bounds = new { m.Bounds.X, m.Bounds.Y, m.Bounds.Width, m.Bounds.Height },
-                m.Health,
-                m.Type,
-                m.Speed
-            }).ToList(),
-            bullets = bullets.Select(b => new
-            {
-                x = b.Bounds.Center.X,
-                y = b.Bounds.Center.Y,
-                bounds = new { b.Bounds.X, b.Bounds.Y, b.Bounds.Width, b.Bounds.Height },
-                motion = new { x = b.Motion.X, y = b.Motion.Y },
-                b.Damage
-            }).ToList(),
-            powerups = powerups.Select(p => new
-            {
-                x = p.Bounds.Center.X,
-                y = p.Bounds.Center.Y,
-                bounds = new { p.Bounds.X, p.Bounds.Y, p.Bounds.Width, p.Bounds.Height },
-                p.Which
-            }).ToList(),
-            inputFields = new
-            {
-                movement = _pkPlayerMovementDirectionsField?.Name,
-                shooting = _pkPlayerShootingDirectionsField?.Name,
-                allFields = minigame!.GetType().GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
-                    .Where(f => f.FieldType.Name.Contains("List") || f.Name.Contains("irection") || f.Name.Contains("move") || f.Name.Contains("shoot") || f.Name.Contains("input") || f.Name.Contains("key"))
-                    .Select(f => $"{f.FieldType.Name} {f.Name}")
-                    .ToArray(),
-                allMethods = minigame!.GetType().GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
-                    .Where(m => m.Name.Contains("Input") || m.Name.Contains("Update") || m.Name.Contains("key") || m.Name.Contains("Key"))
-                    .Select(m => m.Name)
-                    .Distinct()
-                    .ToArray()
-            },
-            lastMove = new { x = _minigameBotLastMove.X, y = _minigameBotLastMove.Y },
-            lastError = _minigameBotLastError
-        };
-    }
-
-    private void TickPrairieKingBot(object game)
-    {
-        EnsurePrairieKingReflection(game);
-
-        if (IsPrairieKingShopping(game) || IsPrairieKingDeathState(game))
-        {
-            ClearPrairieKingInput(game);
-            return;
-        }
-
-        var playerBounds = ReadPrairieKingPlayerBounds(game);
-        if (playerBounds.Width <= 0 || playerBounds.Height <= 0)
-        {
-            ClearPrairieKingInput(game);
-            return;
-        }
-
-        var monsters = ReadPrairieKingMonsters(game);
-        var bullets = ReadPrairieKingBullets(game);
-        var powerups = ReadPrairieKingPowerups(game);
-
-        if (IsPrairieKingBetweenWaves(game, monsters.Count) && powerups.Count == 0)
-        {
-            ClearPrairieKingInput(game);
-            return;
-        }
-
-        var player = new Vector2(playerBounds.Center.X, playerBounds.Center.Y);
-        var move = ChoosePrairieKingMove(player, monsters, bullets, powerups);
-        _minigameBotLastMove = move;
-
-        // Direct position manipulation — bypass input system entirely
-        if (move != Vector2.Zero && _pkPlayerPositionField != null)
-        {
-            var pos = _pkPlayerPositionField.GetValue(game);
-            if (pos is Vector2 currentPos)
-            {
-                var speed = 3f;
-                var newPos = currentPos + move * speed;
-                newPos.X = Math.Clamp(newPos.X, 8f, 744f);
-                newPos.Y = Math.Clamp(newPos.Y, 8f, 744f);
-                _pkPlayerPositionField.SetValue(game, newPos);
-
-                // Update bounding box to match
-                if (_pkPlayerBoundingBoxField != null)
-                {
-                    var bb = new Microsoft.Xna.Framework.Rectangle(
-                        (int)newPos.X - 12, (int)newPos.Y - 12, 24, 24);
-                    _pkPlayerBoundingBoxField.SetValue(game, bb);
-                }
-            }
-        }
-
-        // Inject shooting directions (may work for bullet spawning even on host)
-        var target = monsters
-            .Where(m => m.Health != 0)
-            .OrderBy(m => Vector2.DistanceSquared(player, new Vector2(m.Bounds.Center.X, m.Bounds.Center.Y)))
-            .FirstOrDefault();
-
-        var shootDirs = target != null
-            ? DirectionsFromVector(new Vector2(target.Bounds.Center.X - player.X, target.Bounds.Center.Y - player.Y), 0.15f)
-            : Array.Empty<int>();
-
-        PkBotShootDirections = shootDirs;
-        PkBotMoveDirections = DirectionsFromVector(move, 0.25f);
-        PkBotInjecting = true;
-        _minigameBotLastError = null;
-    }
-
-    private static Vector2 ChoosePrairieKingMove(
-        Vector2 player,
-        List<PrairieKingMonster> monsters,
-        List<PrairieKingBullet> bullets,
-        List<PrairieKingPowerup> powerups)
-    {
-        var candidates = new[]
-        {
-            Vector2.Zero,
-            new Vector2(0, -1),
-            new Vector2(1, -1),
-            new Vector2(1, 0),
-            new Vector2(1, 1),
-            new Vector2(0, 1),
-            new Vector2(-1, 1),
-            new Vector2(-1, 0),
-            new Vector2(-1, -1)
-        };
-
-        var best = Vector2.Zero;
-        var bestScore = double.NegativeInfinity;
-
-        foreach (var raw in candidates)
-        {
-            var move = raw;
-            if (move != Vector2.Zero)
-                move.Normalize();
-
-            var probe = player + move * 42f;
-            var score = 0.0;
-
-            if (probe.X < 48 || probe.X > 720 || probe.Y < 48 || probe.Y > 720)
-                score -= 20000;
-
-            var center = new Vector2(384, 384);
-            score -= Vector2.Distance(probe, center) * 0.03;
-
-            foreach (var bullet in bullets)
-            {
-                var bulletPos = new Vector2(bullet.Bounds.Center.X, bullet.Bounds.Center.Y);
-                var motion = new Vector2(bullet.Motion.X, bullet.Motion.Y);
-                var worst = double.PositiveInfinity;
-
-                for (int i = 0; i <= 18; i += 3)
-                {
-                    var future = bulletPos + motion * i;
-                    worst = Math.Min(worst, Vector2.Distance(probe, future));
-                }
-
-                if (worst < 34)
-                    score -= 50000;
-                else if (worst < 96)
-                    score -= (96 - worst) * 45;
-
-                var towardPlayer = player - bulletPos;
-                if (motion != Vector2.Zero && towardPlayer != Vector2.Zero)
-                {
-                    motion.Normalize();
-                    towardPlayer.Normalize();
-                    score -= Math.Max(0, Vector2.Dot(motion, towardPlayer)) * 350;
-                }
-            }
-
-            foreach (var monster in monsters)
-            {
-                var monsterPos = new Vector2(monster.Bounds.Center.X, monster.Bounds.Center.Y);
-                var dist = Vector2.Distance(probe, monsterPos);
-                if (dist < 58)
-                    score -= 35000;
-                else if (dist < 150)
-                    score -= (150 - dist) * 85;
-                else if (dist > 230)
-                    score += Math.Min(90, (dist - 230) * 0.2);
-            }
-
-            foreach (var powerup in powerups)
-            {
-                var powerupPos = new Vector2(powerup.Bounds.Center.X, powerup.Bounds.Center.Y);
-                var powerupDistance = Vector2.Distance(probe, powerupPos);
-                var nearestMonster = monsters.Count == 0
-                    ? double.PositiveInfinity
-                    : monsters.Min(m => Vector2.Distance(powerupPos, new Vector2(m.Bounds.Center.X, m.Bounds.Center.Y)));
-                var nearestBullet = bullets.Count == 0
-                    ? double.PositiveInfinity
-                    : bullets.Min(b => Vector2.Distance(powerupPos, new Vector2(b.Bounds.Center.X, b.Bounds.Center.Y)));
-
-                if (nearestMonster > 115 && nearestBullet > 80)
-                    score += 1600 / Math.Max(1, powerupDistance);
-            }
-
-            if (score > bestScore)
-            {
-                bestScore = score;
-                best = move;
-            }
-        }
-
-        return best;
-    }
-
-    private void ClearPrairieKingInput(object game)
-    {
-        PkBotInjecting = false;
-        PkBotMoveDirections = Array.Empty<int>();
-        PkBotShootDirections = Array.Empty<int>();
-    }
-
-    internal static void PkUpdateInputPostfix(object __instance)
-    {
-        if (!PkBotInjecting) return;
-        var type = __instance.GetType();
-        var moveField = type.GetField("player2MovementDirections", BindingFlags.NonPublic | BindingFlags.Instance)
-            ?? type.GetField("playerMovementDirections", BindingFlags.NonPublic | BindingFlags.Instance);
-        var shootField = type.GetField("player2ShootingDirections", BindingFlags.NonPublic | BindingFlags.Instance)
-            ?? type.GetField("playerShootingDirections", BindingFlags.NonPublic | BindingFlags.Instance);
-        if (moveField?.GetValue(__instance) is ICollection<int> moveList)
-        {
-            moveList.Clear();
-            foreach (var d in PkBotMoveDirections) moveList.Add(d);
-        }
-        if (shootField?.GetValue(__instance) is ICollection<int> shootList)
-        {
-            shootList.Clear();
-            foreach (var d in PkBotShootDirections) shootList.Add(d);
-        }
-    }
-
-    private static void SetPrairieKingDirections(object game, FieldInfo? field, IEnumerable<int> directions)
-    {
-        if (field == null)
-            return;
-
-        var dirArray = directions.Distinct().ToArray();
-        var target = field.IsStatic ? null : game;
-        var current = field.GetValue(target);
-
-        if (current is ICollection<int> intCollection)
-        {
-            intCollection.Clear();
-            foreach (var direction in dirArray)
-                intCollection.Add(direction);
-            return;
-        }
-
-        if (field.FieldType == typeof(int[]))
-        {
-            field.SetValue(target, dirArray);
-            return;
-        }
-
-        if (field.FieldType.IsAssignableFrom(typeof(List<int>)))
-            field.SetValue(target, dirArray.ToList());
-    }
-
-    private static int[] DirectionsFromVector(Vector2 vector, float threshold)
-    {
-        if (vector == Vector2.Zero)
-            return Array.Empty<int>();
-
-        if (vector.LengthSquared() > 1f)
-            vector.Normalize();
-
-        var directions = new List<int>(2);
-        if (vector.Y < -threshold)
-            directions.Add(0);
-        if (vector.X > threshold)
-            directions.Add(1);
-        if (vector.Y > threshold)
-            directions.Add(2);
-        if (vector.X < -threshold)
-            directions.Add(3);
-
-        if (directions.Count > 0)
-            return directions.ToArray();
-
-        return Math.Abs(vector.X) > Math.Abs(vector.Y)
-            ? new[] { vector.X >= 0 ? 1 : 3 }
-            : new[] { vector.Y >= 0 ? 2 : 0 };
-    }
-
-    private static bool IsPrairieKing(object? minigame)
-    {
-        if (minigame == null)
-            return false;
-
-        _abigailGameType ??= typeof(Game1).Assembly.GetType("StardewValley.Minigames.AbigailGame");
-        return minigame.GetType() == _abigailGameType
-            || minigame.GetType().FullName == "StardewValley.Minigames.AbigailGame";
-    }
-
-    private static void EnsurePrairieKingReflection(object game)
-    {
-        var type = game.GetType();
-        if (_abigailGameReflectedType == type)
-            return;
-
-        const BindingFlags instance = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
-        const BindingFlags statik = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
-
-        _abigailGameType = type;
-        _abigailGameReflectedType = type;
-        _pkObjectFieldCache.Clear();
-
-        _pkPlayerPositionField = FirstField(type, instance, "playerPosition", "playerPos");
-        _pkPlayerBoundingBoxField = FirstField(type, instance, "playerBoundingBox", "playerBox", "playerBounds");
-        _pkPlayerMovementDirectionsField = FirstField(type, instance, "playerMovementDirections", "player2MovementDirections");
-        _pkPlayerShootingDirectionsField = FirstField(type, instance, "playerShootingDirections", "player2ShootingDirections");
-        _pkMonstersField = FirstField(type, statik, "monsters")
-            ?? FindCollectionField(type, "CowboyMonster", true);
-        _pkBulletsField = FirstField(type, instance, "enemyBullets", "monsterBullets", "bullets")
-            ?? FindCollectionField(type, "CowboyBullet", false);
-        _pkPowerupsField = FirstField(type, instance, "powerups")
-            ?? FindCollectionField(type, "CowboyPowerup", false);
-        _pkShoppingField = FirstField(type, instance, "shopping", "isShopping");
-        _pkDeathTimerField = FirstField(type, instance, "deathTimer", "playerDeathTimer", "playerDieTimer", "diedTimer");
-        _pkBetweenWaveTimerField = FirstField(type, instance, "betweenWaveTimer", "newWaveTimer", "waveStartTimer");
-        _pkGameOverField = FirstField(type, instance, "gameOver", "gameOverScreen");
-        _pkLivesField = FirstField(type, instance, "lives", "playerLives");
-        _pkCoinsField = FirstField(type, instance, "coins", "money");
-        _pkWhichWaveField = FirstField(type, instance, "whichWave", "currentWave", "wave");
-    }
-
-    private static FieldInfo? FirstField(Type type, BindingFlags flags, params string[] names)
-    {
-        foreach (var name in names)
-        {
-            var field = type.GetField(name, flags);
-            if (field != null)
-                return field;
-        }
-        return null;
-    }
-
-    private static FieldInfo? FindCollectionField(Type type, string elementTypeName, bool includeStatic)
-    {
-        var flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
-        if (includeStatic)
-            flags |= BindingFlags.Static;
-
-        return type.GetFields(flags)
-            .FirstOrDefault(field => FieldMentionsType(field.FieldType, elementTypeName));
-    }
-
-    private static bool FieldMentionsType(Type type, string typeName)
-    {
-        if ((type.FullName ?? type.Name).Contains(typeName, StringComparison.Ordinal))
-            return true;
-
-        return type.IsGenericType && type.GetGenericArguments()
-            .Any(arg => (arg.FullName ?? arg.Name).Contains(typeName, StringComparison.Ordinal));
-    }
-
-    private static bool IsPrairieKingShopping(object game)
-    {
-        return ReadBoolField(game, _pkShoppingField);
-    }
-
-    private static bool IsPrairieKingDeathState(object game)
-    {
-        return ReadBoolField(game, _pkGameOverField) || ReadIntField(game, _pkDeathTimerField, 0) > 0;
-    }
-
-    private static bool IsPrairieKingBetweenWaves(object game, int monsterCount)
-    {
-        return monsterCount == 0 || ReadIntField(game, _pkBetweenWaveTimerField, 0) > 0;
-    }
-
-    private static Microsoft.Xna.Framework.Rectangle ReadPrairieKingPlayerBounds(object game)
-    {
-        var target = _pkPlayerBoundingBoxField?.GetValue(game);
-        if (TryReadRectangle(target, out var rect))
-            return rect;
-
-        target = _pkPlayerPositionField?.GetValue(game);
-        if (TryReadPoint(target, out var point))
-            return new Microsoft.Xna.Framework.Rectangle(point.X - 16, point.Y - 16, 32, 32);
-
-        return Microsoft.Xna.Framework.Rectangle.Empty;
-    }
-
-    private static List<PrairieKingMonster> ReadPrairieKingMonsters(object game)
-    {
-        return ReadPrairieKingObjects(game, _pkMonstersField)
-            .Select(obj => new PrairieKingMonster(
-                ReadObjectRectangle(obj, "position", 32),
-                ReadObjectInt(obj, "health", 1),
-                ReadObjectInt(obj, "type", -1),
-                ReadObjectInt(obj, "speed", 0)))
-            .Where(m => m.Bounds.Width > 0 && m.Bounds.Height > 0 && m.Health != 0)
-            .ToList();
-    }
-
-    private static List<PrairieKingBullet> ReadPrairieKingBullets(object game)
-    {
-        return ReadPrairieKingObjects(game, _pkBulletsField)
-            .Select(obj => new PrairieKingBullet(
-                ReadObjectRectangle(obj, "position", 12),
-                ReadObjectPoint(obj, "motion"),
-                ReadObjectInt(obj, "damage", 1)))
-            .Where(b => b.Bounds.Width > 0 && b.Bounds.Height > 0)
-            .ToList();
-    }
-
-    private static List<PrairieKingPowerup> ReadPrairieKingPowerups(object game)
-    {
-        return ReadPrairieKingObjects(game, _pkPowerupsField)
-            .Select(obj => new PrairieKingPowerup(
-                ReadObjectRectangle(obj, "position", 24),
-                ReadObjectInt(obj, "which", -1)))
-            .Where(p => p.Bounds.Width > 0 && p.Bounds.Height > 0)
-            .ToList();
-    }
-
-    private static List<object> ReadPrairieKingObjects(object game, FieldInfo? field)
-    {
-        if (field == null)
-            return new List<object>();
-
-        var value = field.GetValue(field.IsStatic ? null : game);
-        if (value is not System.Collections.IEnumerable enumerable)
-            return new List<object>();
-
-        var result = new List<object>();
-        foreach (var entry in enumerable)
-        {
-            if (entry != null)
-                result.Add(entry);
-        }
-        return result;
-    }
-
-    private static Microsoft.Xna.Framework.Rectangle ReadObjectRectangle(object obj, string memberName, int fallbackSize)
-    {
-        var value = ReadObjectMember(obj, memberName);
-        if (TryReadRectangle(value, out var rect))
-            return rect;
-        if (TryReadPoint(value, out var point))
-            return new Microsoft.Xna.Framework.Rectangle(point.X - fallbackSize / 2, point.Y - fallbackSize / 2, fallbackSize, fallbackSize);
-        return Microsoft.Xna.Framework.Rectangle.Empty;
-    }
-
-    private static Microsoft.Xna.Framework.Point ReadObjectPoint(object obj, string memberName)
-    {
-        var value = ReadObjectMember(obj, memberName);
-        return TryReadPoint(value, out var point) ? point : Microsoft.Xna.Framework.Point.Zero;
-    }
-
-    private static int ReadObjectInt(object obj, string memberName, int fallback)
-    {
-        var value = ReadObjectMember(obj, memberName);
-        try { return value == null ? fallback : Convert.ToInt32(value); }
-        catch { return fallback; }
-    }
-
-    private static object? ReadObjectMember(object obj, string memberName)
-    {
-        var type = obj.GetType();
-        var key = $"{type.FullName}.{memberName}";
-        if (!_pkObjectFieldCache.TryGetValue(key, out var field))
-        {
-            field = type.GetField(memberName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-            _pkObjectFieldCache[key] = field;
-        }
-
-        if (field != null)
-            return field.GetValue(obj);
-
-        return type.GetProperty(memberName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
-            ?.GetValue(obj);
-    }
-
-    private static bool TryReadRectangle(object? value, out Microsoft.Xna.Framework.Rectangle rect)
-    {
-        if (value is Microsoft.Xna.Framework.Rectangle xnaRect)
-        {
-            rect = xnaRect;
-            return true;
-        }
-
-        rect = Microsoft.Xna.Framework.Rectangle.Empty;
-        return false;
-    }
-
-    private static bool TryReadPoint(object? value, out Microsoft.Xna.Framework.Point point)
-    {
-        switch (value)
-        {
-            case Microsoft.Xna.Framework.Point xnaPoint:
-                point = xnaPoint;
-                return true;
-            case Vector2 vector:
-                point = new Microsoft.Xna.Framework.Point((int)vector.X, (int)vector.Y);
-                return true;
-            default:
-                point = Microsoft.Xna.Framework.Point.Zero;
-                return false;
-        }
-    }
-
-    private static int ReadIntField(object owner, FieldInfo? field, int fallback)
-    {
-        if (field == null)
-            return fallback;
-
-        try
-        {
-            var value = field.GetValue(field.IsStatic ? null : owner);
-            return value == null ? fallback : Convert.ToInt32(value);
-        }
-        catch
-        {
-            return fallback;
-        }
-    }
-
-    private static bool ReadBoolField(object owner, FieldInfo? field)
-    {
-        if (field == null)
-            return false;
-
-        try
-        {
-            var value = field.GetValue(field.IsStatic ? null : owner);
-            return value is bool b && b;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private sealed record PrairieKingMonster(
-        Microsoft.Xna.Framework.Rectangle Bounds,
-        int Health,
-        int Type,
-        int Speed);
-
-    private sealed record PrairieKingBullet(
-        Microsoft.Xna.Framework.Rectangle Bounds,
-        Microsoft.Xna.Framework.Point Motion,
-        int Damage);
-
-    private sealed record PrairieKingPowerup(
-        Microsoft.Xna.Framework.Rectangle Bounds,
-        int Which);
 
     private object HandleMenu()
     {
@@ -3235,6 +2587,261 @@ public class ModEntry : Mod
                     count = animals.Count,
                     animals
                 });
+            }
+            catch (Exception ex)
+            {
+                tcs.SetResult(new { ok = false, error = ex.Message });
+            }
+        });
+        return tcs.Task.GetAwaiter().GetResult();
+    }
+
+    private object HandleScan()
+    {
+        if (!Context.IsWorldReady)
+            throw new InvalidOperationException("World not ready");
+
+        var tcs = new TaskCompletionSource<object>();
+        EnqueueMainThread(() =>
+        {
+            try
+            {
+                var loc = Game1.currentLocation;
+                var actions = new List<object>();
+                for (int x = 0; x < loc.Map.Layers[0].LayerWidth; x++)
+                {
+                    for (int y = 0; y < loc.Map.Layers[0].LayerHeight; y++)
+                    {
+                        string? action = loc.doesTileHaveProperty(x, y, "Action", "Buildings");
+                        if (action != null)
+                            actions.Add(new { x, y, action });
+                    }
+                }
+                tcs.SetResult(new { ok = true, location = loc.Name, count = actions.Count, actions });
+            }
+            catch (Exception ex)
+            {
+                tcs.SetResult(new { ok = false, error = ex.Message });
+            }
+        });
+        return tcs.Task.GetAwaiter().GetResult();
+    }
+
+    private object HandleFestival()
+    {
+        if (!Context.IsWorldReady)
+            throw new InvalidOperationException("World not ready");
+
+        var tcs = new TaskCompletionSource<object>();
+        EnqueueMainThread(() =>
+        {
+            try
+            {
+                var evt = Game1.CurrentEvent;
+                if (evt == null)
+                {
+                    tcs.SetResult(new { ok = false, error = "No active event" });
+                    return;
+                }
+
+                var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+                var actors = new List<object>();
+
+                // Get event actors
+                var actorsField = evt.GetType().GetField("actors", flags);
+                if (actorsField?.GetValue(evt) is IEnumerable<NPC> npcList)
+                {
+                    foreach (var npc in npcList)
+                    {
+                        actors.Add(new
+                        {
+                            name = npc.Name,
+                            displayName = npc.displayName,
+                            x = npc.TilePoint.X,
+                            y = npc.TilePoint.Y
+                        });
+                    }
+                }
+
+                // Check festival name
+                string festivalName = "";
+                var nameField = evt.GetType().GetField("FestivalName", flags) ?? evt.GetType().GetField("festivalName", flags);
+                if (nameField != null)
+                    festivalName = nameField.GetValue(evt) as string ?? "";
+                var nameProp = evt.GetType().GetProperty("FestivalName", flags);
+                if (string.IsNullOrEmpty(festivalName) && nameProp != null)
+                    festivalName = nameProp.GetValue(evt) as string ?? "";
+
+                // Check isFestival
+                bool isFestival = false;
+                var isFestMethod = typeof(Game1).GetMethod("isFestival", flags, null, Type.EmptyTypes, null);
+                if (isFestMethod != null)
+                    isFestival = (bool?)isFestMethod.Invoke(null, null) ?? false;
+
+                tcs.SetResult(new
+                {
+                    ok = true,
+                    isFestival,
+                    festivalName,
+                    location = Game1.currentLocation?.Name,
+                    actorCount = actors.Count,
+                    actors
+                });
+            }
+            catch (Exception ex)
+            {
+                tcs.SetResult(new { ok = false, error = ex.Message });
+            }
+        });
+        return tcs.Task.GetAwaiter().GetResult();
+    }
+
+    private object HandleFestivalInteract(HttpListenerContext ctx)
+    {
+        if (!Context.IsWorldReady)
+            throw new InvalidOperationException("World not ready");
+
+        var body = ReadJson(ctx);
+        string targetName = body.ContainsKey("name") ? body["name"].ToString() : "";
+
+        var tcs = new TaskCompletionSource<object>();
+        EnqueueMainThread(() =>
+        {
+            try
+            {
+                var evt = Game1.CurrentEvent;
+                if (evt == null)
+                {
+                    tcs.SetResult(new { ok = false, error = "No active event" });
+                    return;
+                }
+
+                var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+                var actorsField = evt.GetType().GetField("actors", flags);
+                if (actorsField?.GetValue(evt) is not IEnumerable<NPC> npcList)
+                {
+                    tcs.SetResult(new { ok = false, error = "No actors found" });
+                    return;
+                }
+
+                NPC? target = null;
+                foreach (var npc in npcList)
+                {
+                    if (string.IsNullOrEmpty(targetName) || npc.Name.Equals(targetName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        target = npc;
+                        break;
+                    }
+                }
+
+                if (target == null)
+                {
+                    tcs.SetResult(new { ok = false, error = $"Actor '{targetName}' not found" });
+                    return;
+                }
+
+                // Move player next to NPC and face them
+                var farmer = Game1.player;
+                farmer.Position = new Vector2(target.TilePoint.X, target.TilePoint.Y + 1) * Game1.tileSize;
+                farmer.faceDirection(0); // face up toward NPC
+
+                // Try to trigger NPC action via checkAction
+                bool triggered = Game1.currentLocation.checkAction(
+                    new xTile.Dimensions.Location(target.TilePoint.X, target.TilePoint.Y),
+                    Game1.viewport, farmer);
+
+                if (!triggered)
+                {
+                    // Fallback: try direct NPC click
+                    target.checkAction(farmer, Game1.currentLocation);
+                    triggered = true;
+                }
+
+                tcs.SetResult(new
+                {
+                    ok = true,
+                    target = target.Name,
+                    targetTile = new { x = target.TilePoint.X, y = target.TilePoint.Y },
+                    playerTile = new { x = farmer.TilePoint.X, y = farmer.TilePoint.Y },
+                    triggered
+                });
+            }
+            catch (Exception ex)
+            {
+                tcs.SetResult(new { ok = false, error = ex.Message });
+            }
+        });
+        return tcs.Task.GetAwaiter().GetResult();
+    }
+
+    private object HandleFestivalAnswer(HttpListenerContext ctx)
+    {
+        if (!Context.IsWorldReady)
+            throw new InvalidOperationException("World not ready");
+
+        var body = ReadJson(ctx);
+        int answer = body.ContainsKey("answer") ? Convert.ToInt32(body["answer"]) : 0;
+        string key = body.ContainsKey("key") ? body["key"].ToString() : "";
+
+        var tcs = new TaskCompletionSource<object>();
+        EnqueueMainThread(() =>
+        {
+            try
+            {
+                var evt = Game1.CurrentEvent;
+                if (evt == null)
+                {
+                    tcs.SetResult(new { ok = false, error = "No active event" });
+                    return;
+                }
+
+                var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+
+                // Try answerDialogueQuestion
+                var answerMethod = evt.GetType().GetMethod("answerDialogueQuestion", flags);
+                if (answerMethod != null)
+                {
+                    var npc = Game1.currentLocation.isCharacterAtTile(Game1.player.GetGrabTile());
+                    answerMethod.Invoke(evt, new object?[] { npc, answer.ToString() });
+                    tcs.SetResult(new { ok = true, method = "answerDialogueQuestion", answer });
+                    return;
+                }
+
+                // Fallback: try answerDialogue on the event
+                var methods = evt.GetType().GetMethods(flags);
+                foreach (var m in methods)
+                {
+                    if (m.Name.Contains("answer", StringComparison.OrdinalIgnoreCase) ||
+                        m.Name.Contains("Answer", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var parms = m.GetParameters();
+                        if (parms.Length >= 1)
+                        {
+                            try
+                            {
+                                if (parms[0].ParameterType == typeof(int))
+                                    m.Invoke(evt, new object[] { answer });
+                                else if (parms[0].ParameterType == typeof(string))
+                                    m.Invoke(evt, new object[] { answer.ToString() });
+                                tcs.SetResult(new { ok = true, method = m.Name, answer });
+                                return;
+                            }
+                            catch { continue; }
+                        }
+                    }
+                }
+
+                // Fallback: use Game1.currentLocation.answerDialogueAction
+                var locMethod = Game1.currentLocation.GetType().GetMethod("answerDialogueAction", flags);
+                if (locMethod != null)
+                {
+                    string actionKey = string.IsNullOrEmpty(key) ? $"festival_{answer}" : key;
+                    locMethod.Invoke(Game1.currentLocation, new object[] { actionKey, Array.Empty<string>() });
+                    tcs.SetResult(new { ok = true, method = "location.answerDialogueAction", key = actionKey });
+                    return;
+                }
+
+                tcs.SetResult(new { ok = false, error = "No answer method found" });
             }
             catch (Exception ex)
             {

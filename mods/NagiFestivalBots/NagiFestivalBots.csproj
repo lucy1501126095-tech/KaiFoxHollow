@@ -1,16 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
-    <EnableHarmonyTranspilerSupport>true</EnableHarmonyTranspilerSupport>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
-
-  <ItemGroup>
-    <Compile Remove="mods\NagiCalicoBot\**" />
-    <Compile Remove="mods\NagiFestivalBots\FestivalModEntry.cs" />
-  </ItemGroup>
 
   <ItemGroup>
     <Reference Include="Stardew Valley">
@@ -27,10 +21,6 @@
     </Reference>
     <Reference Include="xTile">
       <HintPath>E:\SteamLibrary\steamapps\common\Stardew Valley\xTile.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="0Harmony">
-      <HintPath>E:\SteamLibrary\steamapps\common\Stardew Valley\smapi-internal\0Harmony.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>
