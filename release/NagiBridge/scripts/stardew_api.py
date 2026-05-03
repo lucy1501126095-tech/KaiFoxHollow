@@ -32,11 +32,6 @@ def surroundings(radius=10):
     return _get("/surroundings", {"radius": radius})
 
 
-def alerts(peek=False):
-    """Return queued game/system alerts. By default this drains the queue."""
-    return _get("/alerts", {"peek": str(bool(peek)).lower()})
-
-
 # ── Actions ──
 
 def move_to(x, y, timeout=15):

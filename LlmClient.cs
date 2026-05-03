@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -12,18 +13,61 @@ public class LlmClient
     private readonly ModConfig _config;
     private readonly HttpClient _http = new();
     private readonly List<ChatTurn> _history = new();
+    private readonly string _historyPath;
 
     private record ChatTurn(string Role, string Content);
 
-    public LlmClient(ModConfig config)
+    public LlmClient(ModConfig config, string? modPath = null)
     {
         _config = config;
+        _historyPath = modPath != null
+            ? Path.Combine(modPath, "chat_history.json")
+            : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Mods", "NagiBridge", "chat_history.json");
+        LoadHistory();
+    }
+
+    private void LoadHistory()
+    {
+        try
+        {
+            if (File.Exists(_historyPath))
+            {
+                var json = File.ReadAllText(_historyPath, Encoding.UTF8);
+                var entries = JsonSerializer.Deserialize<List<HistoryEntry>>(json);
+                if (entries != null)
+                {
+                    _history.Clear();
+                    foreach (var e in entries)
+                        _history.Add(new ChatTurn(e.role, e.content));
+                }
+            }
+        }
+        catch { }
+    }
+
+    private void SaveHistory()
+    {
+        try
+        {
+            var entries = new List<HistoryEntry>();
+            foreach (var h in _history)
+                entries.Add(new HistoryEntry { role = h.Role, content = h.Content });
+            var json = JsonSerializer.Serialize(entries, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(_historyPath, json, Encoding.UTF8);
+        }
+        catch { }
+    }
+
+    private class HistoryEntry
+    {
+        public string role { get; set; } = "";
+        public string content { get; set; } = "";
     }
 
     public async Task<string> SendAsync(string userMessage)
     {
         if (string.IsNullOrEmpty(_config.ApiKey))
-            return "[No API key configured - edit config.json]";
+            return "[No API key - paste in API Setup]";
 
         _history.Add(new ChatTurn("user", userMessage));
         if (_history.Count > _config.MaxHistoryMessages)
@@ -31,18 +75,20 @@ public class LlmClient
 
         try
         {
+            var customUrl = string.IsNullOrEmpty(_config.ApiUrl) ? null : _config.ApiUrl;
             var response = _config.ApiProvider.ToLower() switch
             {
-                "claude" or "anthropic" => await CallClaude(),
-                "deepseek" => await CallOpenAICompatible("https://api.deepseek.com/v1/chat/completions"),
-                "openai" => await CallOpenAICompatible("https://api.openai.com/v1/chat/completions"),
-                _ => await CallOpenAICompatible("https://api.openai.com/v1/chat/completions")
+                "claude" or "anthropic" => await CallClaude(customUrl),
+                "deepseek" => await CallOpenAICompatible(customUrl ?? "https://api.deepseek.com/v1/chat/completions"),
+                "openai" => await CallOpenAICompatible(customUrl ?? "https://api.openai.com/v1/chat/completions"),
+                _ => await CallOpenAICompatible(customUrl ?? "https://api.openai.com/v1/chat/completions")
             };
 
             _history.Add(new ChatTurn("assistant", response));
             if (_history.Count > _config.MaxHistoryMessages)
                 _history.RemoveAt(0);
 
+            SaveHistory();
             return response;
         }
         catch (Exception ex)
@@ -51,7 +97,7 @@ public class LlmClient
         }
     }
 
-    private async Task<string> CallClaude()
+    private async Task<string> CallClaude(string? customUrl = null)
     {
         var messages = new List<object>();
         foreach (var turn in _history)
@@ -65,7 +111,7 @@ public class LlmClient
             messages
         };
 
-        var request = new HttpRequestMessage(HttpMethod.Post, "https://api.anthropic.com/v1/messages");
+        var request = new HttpRequestMessage(HttpMethod.Post, customUrl ?? "https://api.anthropic.com/v1/messages");
         request.Headers.Add("x-api-key", _config.ApiKey);
         request.Headers.Add("anthropic-version", "2023-06-01");
         request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");

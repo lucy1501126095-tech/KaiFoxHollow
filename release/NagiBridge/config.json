@@ -1,0 +1,10 @@
+{
+  "Mode": "",
+  "ChannelServerUrl": "http://localhost:9000/chat",
+  "ApiProvider": "deepseek",
+  "ApiUrl": "",
+  "ApiKey": "",
+  "Model": "deepseek-chat",
+  "SystemPrompt": "You are a friendly AI companion in Stardew Valley. Chat casually with the player about farm life, give tips, and keep them company. Keep responses short (1-3 sentences) since this is in-game chat.",
+  "MaxHistoryMessages": 20
+}

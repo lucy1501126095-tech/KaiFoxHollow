@@ -87,66 +87,51 @@ def refill_water():
     return False
 
 
-def flatten_tiles(tiles):
-    """Flatten multi-row tiles into a single snake-ordered list."""
-    flat = []
+def do_phase(tiles, tool_or_item, phase_name):
+    api.log(f"--- {phase_name}: {tool_or_item} ---")
+    api.select(tool_or_item)
+    time.sleep(0.15)
+
+    is_watering = (tool_or_item == "Watering Can")
+
     for row in tiles:
-        flat.extend(row)
-    return flat
-
-
-def do_action(tx, ty, tool_or_item, is_watering):
-    """Move to tile and use tool/item."""
-    if not check_stamina():
-        api.log(f"stopped at ({tx},{ty}) due to low stamina")
-        return False
-
-    if is_watering:
-        water, _ = api.watering_can_water()
-        if water is not None and water <= 0:
-            if not refill_water():
+        for tx, ty in row:
+            if not check_stamina():
+                api.log(f"stopped at ({tx},{ty}) due to low stamina")
                 return False
-            api.select("Watering Can")
-            time.sleep(0.15)
 
-    stand_x, stand_y = tx, ty - 1
-    api._post("/position", {"x": stand_x, "y": stand_y})
-    time.sleep(0.1)
-    s = api.state()
-    px, py = s["player"]["x"], s["player"]["y"]
-    if px != stand_x or py != stand_y:
-        api.log(f"could not stand at ({stand_x},{stand_y}) for target ({tx},{ty}); actual=({px},{py})")
-        return False
-    api.face(2)
-    time.sleep(0.1)
-    api.use_item()
-    time.sleep(TOOL_DELAY)
+            if is_watering:
+                water, _ = api.watering_can_water()
+                if water is not None and water <= 0:
+                    if not refill_water():
+                        return False
+                    api.select("Watering Can")
+                    time.sleep(0.15)
+
+            api.move_to(tx, ty - 1)
+            api.face(2)
+            time.sleep(0.1)
+            api.use_item()
+            time.sleep(TOOL_DELAY)
     return True
 
 
 def run():
     tiles = calc_tiles(args.start_x, args.start_y, args.length,
                        args.dir, args.rows, args.row_spacing)
-    flat = flatten_tiles(tiles)
-    total = len(flat)
+    total = sum(len(r) for r in tiles)
     api.log(f"=== farm skill: {total} tiles, dir={args.dir}, rows={args.rows}, seed={args.seed} ===")
 
-    phases = [("Hoe", "till", False)]
-    phases.append((args.seed, "plant", False))
+    ok = do_phase(tiles, "Hoe", "till")
+    if not ok:
+        return
+
+    ok = do_phase(tiles, args.seed, "plant")
+    if not ok:
+        return
+
     if not args.skip_water:
-        phases.append(("Watering Can", "water", True))
-
-    for phase_idx, (tool, phase_name, is_watering) in enumerate(phases):
-        api.log(f"--- {phase_name}: {tool} ---")
-        api.select(tool)
-        time.sleep(0.15)
-
-        order = flat if phase_idx % 2 == 0 else list(reversed(flat))
-
-        for tx, ty in order:
-            if not do_action(tx, ty, tool, is_watering):
-                api.log(f"=== stopped during {phase_name} ===")
-                return
+        do_phase(tiles, "Watering Can", "water")
 
     api.log(f"=== done ===")
 
