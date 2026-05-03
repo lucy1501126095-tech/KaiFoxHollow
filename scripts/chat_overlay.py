@@ -5,7 +5,7 @@ Stardew Valley Chat Overlay — 跟随游戏窗口的聊天气泡，只显示最
     python chat_overlay.py [--port 7850]
 
 发消息:
-    POST http://localhost:7850/message  {"sender":"凪","text":"hello"}
+    POST http://localhost:7850/message  {"sender":"AI","text":"hello"}
 """
 
 import argparse
@@ -156,17 +156,24 @@ class ChatOverlay:
 
     CHANNEL_URL = "http://127.0.0.1:9000"
     OUTBOX_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "chat_outbox.txt")
+    INBOX_PATH = os.path.join(os.path.expanduser("~"), "nagi", "overlay_inbox.jsonl")
 
     def _on_send(self, event=None):
         text = self.input_var.get().strip()
         if not text:
             return
         self.input_var.set("")
-        self.show_message("里奈", text)
-        threading.Thread(target=self._send_to_channel, args=(text,), daemon=True).start()
+        self.show_message("Player", text)
+        threading.Thread(target=self._send_message, args=(text,), daemon=True).start()
 
-    def _send_to_channel(self, text):
-        """POST到channel server，由MCP通知CC唤醒"""
+    def _send_message(self, text):
+        """写入inbox文件（hook读取），同时尝试POST channel server"""
+        try:
+            os.makedirs(os.path.dirname(self.INBOX_PATH), exist_ok=True)
+            with open(self.INBOX_PATH, "a", encoding="utf-8") as f:
+                f.write(json.dumps({"text": text, "ts": time.time()}, ensure_ascii=False) + "\n")
+        except Exception as e:
+            print(f"[inbox] write failed: {e}", flush=True)
         try:
             data = json.dumps({"message": text, "chat_id": "game1"}).encode()
             req = urllib.request.Request(
@@ -174,9 +181,9 @@ class ChatOverlay:
                 data=data,
                 headers={"Content-Type": "application/json"},
             )
-            urllib.request.urlopen(req, timeout=5)
-        except Exception as e:
-            print(f"[channel] send failed: {e}", flush=True)
+            urllib.request.urlopen(req, timeout=2)
+        except Exception:
+            pass
 
     def _poll_outbox(self):
         """轮询outbox文件，有新回复就显示气泡"""
@@ -191,16 +198,16 @@ class ChatOverlay:
                         last_ts = ts
                         text = data.get("text", "")
                         if text:
-                            self.root.after(0, lambda t=text: self.show_message("凪", t))
+                            self.root.after(0, lambda t=text: self.show_message("AI", t))
             except Exception:
                 pass
             time.sleep(1)
 
     def _sender_color(self, sender):
         s = sender.lower()
-        if "凪" in s or "nagi" in s:
+        if "AI" in s or "nagi" in s:
             return COLORS["sender_nagi"]
-        if "里奈" in s or "rina" in s:
+        if "Player" in s or "rina" in s:
             return COLORS["sender_rinai"]
         if "system" in s:
             return COLORS["sender_system"]

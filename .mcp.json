@@ -2,7 +2,7 @@
   "mcpServers": {
     "game-overlay": {
       "command": "bun",
-      "args": ["run", "C:\\Users\\syin\\source\\NagiBridge\\server.ts"]
+      "args": ["run", "./server.ts"]
     }
   }
 }

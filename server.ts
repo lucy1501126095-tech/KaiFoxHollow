@@ -3,7 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 
 const LISTEN_PORT = 9000;
-const CHAT_FILE = "C:\\Users\\syin\\source\\NagiBridge\\chat_outbox.txt";
+const CHAT_FILE = new URL("./chat_outbox.txt", import.meta.url).pathname.replace(/^\/([A-Z]:)/, "$1");
 
 const server = new McpServer(
   { name: "game-overlay", version: "0.0.1" },

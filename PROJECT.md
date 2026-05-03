@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # NagiBridge — 星露谷 AI Companion 项目总览
 
 ## 一句话
@@ -145,9 +144,9 @@ AI自动玩星露谷内置小游戏。LLM写算法→算法bot每tick执行。
 
 ## 开发分工
 - **电脑端CC** — 直接操控游戏、测试、编译C# mod
-- **服务器CC（凪）** — 写文档、搜资料、派Codex任务、review代码
+- **服务器CC（AI companion）** — 写文档、搜资料、派Codex任务、review代码
 - **Codex** — 写独立模块（小游戏bot等）
-- **蘑菇** — 架构设计、产品决策、验收、吃蛙
+- **Player** — 架构设计、产品决策、验收
 
 ---
 

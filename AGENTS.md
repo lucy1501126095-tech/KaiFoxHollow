@@ -3,7 +3,7 @@
 你是星露谷物语的农场打工仔。通过 NagiBridge HTTP API 控制角色。
 
 ## 你的端口
-你控制端口 7842（host角色）。另一个AI（凪）控制端口 7843（farmhand）。不要动 7843。
+你控制端口 7842（host角色）。另一个AI控制端口 7843（farmhand）。不要动 7843。
 
 ## 项目位置
 脚本在 scripts/ 目录下。所有 Python 脚本调用前必须加 PYTHONIOENCODING=utf-8。
@@ -69,7 +69,7 @@ curl -X POST http://localhost:7842/store -d '{"x":70,"y":14}'
 ```
 
 ## 协作
-操作前先读 scripts/coordination.json 看凪在干什么，避免重复。做完了更新你的状态。
+操作前先读 scripts/coordination.json 看AI在干什么，避免重复。做完了更新你的状态。
 
 ## 挖矿
 ```bash
@@ -88,7 +88,7 @@ Start-Sleep -Seconds 3
 # 2. 重新启动
 Start-Process "E:\SteamLibrary\steamapps\common\Stardew Valley\StardewModdingAPI.exe"
 ```
-启动后需要手动进存档（或等里奈操作），然后轮询等待 worldReady：
+启动后需要手动进存档（或等the player操作），然后轮询等待 worldReady：
 ```bash
 # 3. 等待游戏就绪
 until curl -s http://localhost:7842/status 2>/dev/null | grep -q '"worldReady":true'; do sleep 5; done
@@ -110,7 +110,7 @@ Fishbot mod 已安装，F5 开关自动钓鱼。流程：
    - 森林河: `{"location":"Forest"}`
    - 矿洞湖: `{"location":"Mine"}`
 3. 走到水边面朝水面
-4. 用 `/key` 模拟按 F5 启动 Fishbot（或提醒里奈手动按 F5）
+4. 用 `/key` 模拟按 F5 启动 Fishbot（或提醒the player手动按 F5）
 5. Fishbot 会自动甩竿、玩 minigame、钓宝箱、体力低自动吃食物
 6. 背包快满了就停下来，把鱼存箱子或卖掉
 
@@ -118,7 +118,7 @@ Fishbot mod 已安装，F5 开关自动钓鱼。流程：
 
 ## 游戏内聊天（MCP Channel）
 
-里奈可以通过游戏overlay直接跟你聊天，不用看终端。
+the player可以通过游戏overlay直接跟你聊天，不用看终端。
 
 ### 架构
 ```
@@ -143,8 +143,8 @@ CC回复 → reply tool → chat_outbox.txt → 气泡轮询显示
 - 如果是游戏操作指令（种田、浇水等），先执行再reply结果
 
 ### 气泡HTTP API（端口7850，仍可用）
-- `POST /message` — 直接推送气泡：`{"sender":"凪","text":"..."}`
-- `GET /inbox` — 读取里奈输入（旧接口，channel模式下不用）
+- `POST /message` — 直接推送气泡：`{"sender":"AI","text":"..."}`
+- `GET /inbox` — 读取the player输入（旧接口，channel模式下不用）
 - `POST /clear` — 清除气泡
 
 ## git 同步
