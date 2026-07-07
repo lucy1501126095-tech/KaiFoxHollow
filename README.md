@@ -16,6 +16,8 @@ Game starts an HTTP server on `localhost:7842` (host) / `7843` (farmhand).
 
 Full endpoint list: see [AGENTS.md](AGENTS.md)
 
+**装Kai大脑（AI伙伴层）→ [INSTALL.md](INSTALL.md)**
+
 ---
 
 ## In-Game Chat
