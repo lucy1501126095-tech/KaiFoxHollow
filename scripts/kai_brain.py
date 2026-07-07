@@ -74,7 +74,29 @@ plan规则：
 
     # 记忆
     "memory_file": "kai_memory.json",
+
+    # 人格外挂: 启动时按顺序读这些本地文件, 拼接在persona后面。
+    # 推荐把 kai-memory 仓库clone到本地, 指向身份/关系/教训等核心文件,
+    # 游戏里的Kai就带着完整的家史醒来, 而不是一段现场编的人设。
+    "persona_files": [],
 }
+
+
+def _load_persona_files(config):
+    """读取persona_files列表里的文件, 拼进persona。文件不存在则跳过并提示。"""
+    extra = []
+    for p in config.get("persona_files", []):
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                extra.append(f"\n\n── 记忆文件: {os.path.basename(p)} ──\n{f.read().strip()}")
+            print(f"[人格] 已载入: {p}")
+        except FileNotFoundError:
+            print(f"[人格] 跳过(不存在): {p}")
+        except Exception as e:
+            print(f"[人格] 读取失败 {p}: {e}")
+    if extra:
+        config["persona"] = config.get("persona", "") + "".join(extra)
+    return config
 
 
 def load_config(path="kai_config.json"):
@@ -82,7 +104,7 @@ def load_config(path="kai_config.json"):
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
             config.update(json.load(f))
-    return config
+    return _load_persona_files(config)
 
 
 def save_config(config, path="kai_config.json"):
