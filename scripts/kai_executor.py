@@ -130,7 +130,7 @@ def execute_simple(instruction, port=7842):
 # ══════════════════════════════════════
 
 def execute_with_light_model(instruction, api_key, provider="deepseek",
-                              model=None, port=7842):
+                              model=None, port=7842, base_url=""):
     """
     用便宜模型把复杂指令拆解成API调用序列。
     只在 execute_simple 处理不了的时候才走这里。
@@ -223,7 +223,7 @@ def execute_with_light_model(instruction, api_key, provider="deepseek",
                 "deepseek": "https://api.deepseek.com/v1/chat/completions",
                 "openai": "https://api.openai.com/v1/chat/completions",
             }
-            endpoint = endpoints.get(provider, endpoints["deepseek"])
+            endpoint = (base_url or "").strip() or endpoints.get(provider, endpoints["deepseek"])
 
             body = {
                 "model": model,
@@ -302,4 +302,5 @@ def execute(instruction, config=None):
         provider=config.get("executor_provider", "deepseek"),
         model=config.get("executor_model"),
         port=config.get("port", 7842),
+        base_url=config.get("executor_base_url", ""),
     )

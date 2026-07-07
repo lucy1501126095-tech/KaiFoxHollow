@@ -37,13 +37,15 @@ STANDARD_TASKS = "浇水/种田/收割/砍树/开垦/挖矿/撸动物/酿酒/熔
 DEFAULT_CONFIG = {
     # 大脑（贵，只在关键时刻用）
     "brain_api_key": "",
-    "brain_provider": "claude",         # claude / deepseek / openai
-    "brain_model": "claude-opus-4-6",
+    "brain_provider": "claude",         # claude / deepseek / openai / custom
+    "brain_model": "claude-opus-4-6",   # 省钱可换 claude-sonnet-4-6, 游戏决策绰绰有余
+    "brain_base_url": "",               # provider=custom时填OpenAI兼容地址(如AstrBot/中转)
 
     # 手脚（便宜，频繁执行用）
     "executor_api_key": "",
-    "executor_provider": "deepseek",    # deepseek / openai / claude
+    "executor_provider": "deepseek",    # deepseek / openai / claude / custom
     "executor_model": "deepseek-chat",
+    "executor_base_url": "",            # provider=custom时的OpenAI兼容地址
 
     # 游戏连接
     "port": 7842,          # 7842=host, 7843=farmhand
@@ -232,7 +234,8 @@ def call_brain(state_card, event_type, event_data, memory, config):
                 "deepseek": "https://api.deepseek.com/v1/chat/completions",
                 "openai": "https://api.openai.com/v1/chat/completions",
             }
-            endpoint = endpoints.get(provider, endpoints["deepseek"])
+            endpoint = (config.get("brain_base_url") or "").strip() or \
+                       endpoints.get(provider, endpoints["deepseek"])
             headers = {"Content-Type": "application/json",
                        "Authorization": f"Bearer {api_key}"}
             body = {
