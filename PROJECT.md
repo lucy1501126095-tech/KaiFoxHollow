@@ -20,6 +20,28 @@
 
 ## 核心模块
 
+### 0. Kai大脑 v2 (kai_brain.py / kai_executor.py / kai_state.py)
+事件驱动的AI伙伴层。贵模型做大脑只在关键时刻醒, 便宜模型+纯脚本做手脚。
+
+**v2修了什么 (2026.7.7)**
+| 问题 | 修法 |
+|------|------|
+| 干活时主循环阻塞, 听不见说话 | 执行挪独立线程, 计划带代际号, 任务边界可换新计划 |
+| 大脑没有耳朵(chat alert是死信道) | 内置HTTP耳朵 :7845, `POST /say {"message":"..."}` |
+| 空plan→task_done每5秒烧一次大脑 | 干完即清计划; low_health/festival/stuck带冷却 |
+| 执行结果不回流, 记忆只存计划 | 结果/聊天写入当天记忆; 连续2次失败→executor_stuck呼救 |
+| port从未生效(脚本默认值还互相打架) | config.port贯穿: BASE_URL + 子进程NAGI_URL + --port |
+| "不用浇水"→冒雨浇水 | 说话优先匹配 + 关键词前3字否定检测 + persona约束标准词 |
+| max_tokens=300截断JSON→连锁死循环 | 800 + 正则抠JSON + decision结构校验 |
+
+**跑法**
+```bash
+python scripts/kai_brain.py        # 首次生成kai_config.json, 填key后再跑
+python scripts/talk_to_kai.py     # 另开终端, 跟Kai说话
+python scripts/test_kai_brain.py  # 不开游戏不花token的全链路自检
+```
+farmhand模式把 kai_config.json 里 port 改成 7843。
+
 ### 1. SMAPI Mod (C#)
 NagiBridge mod本体。提供HTTP API让外部控制游戏角色。
 - **ModEntry.cs** — 主入口，HTTP server，所有API端点

@@ -51,7 +51,7 @@ def compress_inventory(inventory, max_items=8):
     return " | ".join(parts)
 
 
-def compress_surroundings(radius=6):
+def compress_surroundings(radius=10):
     """扫描周围，只返回有意义的信息。"""
     try:
         data = api.surroundings(radius)
@@ -169,7 +169,12 @@ def build_event_context(event_type, event_data=None):
 
     elif event_type == "task_done":
         task = event_data.get("task", "") if event_data else ""
-        ctx = f"刚刚完成了: {task}。决定下一步做什么。"
+        results = (event_data or {}).get("results", [])
+        fails = [r["task"] for r in results if not r.get("ok")]
+        ctx = f"刚刚完成了: {task}。"
+        if fails:
+            ctx += f" 其中失败: {'、'.join(fails)}。"
+        ctx += "决定下一步做什么(也可以休息, 返回空plan)。"
 
     return ctx
 

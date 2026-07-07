@@ -35,16 +35,21 @@ SCRIPT_TASKS = {
 
 
 def run_script(script_name, extra_args="", port=7842):
-    """执行一个现成的自动化脚本。"""
+    """执行一个现成的自动化脚本。不走shell, 参数以列表传递。"""
     script_path = os.path.join(SCRIPT_DIR, script_name)
     if not os.path.exists(script_path):
         return {"ok": False, "error": f"脚本不存在: {script_name}"}
 
-    cmd = f"python \"{script_path}\" {extra_args} --port {port}"
+    cmd = [sys.executable, script_path]
+    if extra_args:
+        cmd += extra_args.split()
+    cmd += ["--port", str(port)]
+    env = {**os.environ,
+           "PYTHONIOENCODING": "utf-8",
+           "NAGI_URL": f"http://localhost:{port}"}
     try:
         result = subprocess.run(
-            cmd, shell=True, capture_output=True, text=True,
-            timeout=300, env={**os.environ, "PYTHONIOENCODING": "utf-8"}
+            cmd, capture_output=True, text=True, timeout=300, env=env
         )
         return {
             "ok": result.returncode == 0,
@@ -59,18 +64,35 @@ def run_script(script_name, extra_args="", port=7842):
 #  简单指令直接执行（零token）
 # ══════════════════════════════════════
 
-def execute_simple(instruction):
+NEGATION_WORDS = ("不", "别", "没", "勿", "停", "免")
+
+def _negated(instruction, keyword):
+    """关键词紧邻的前3个字里出现否定词, 视为反话, 跳过。
+    例: '不用浇水' '别去挖矿' '今天没浇水的必要'"""
+    idx = instruction.find(keyword)
+    if idx <= 0:
+        return False
+    prefix = instruction[max(0, idx - 3):idx]
+    return any(n in prefix for n in NEGATION_WORDS)
+
+
+def execute_simple(instruction, port=7842):
     """
     尝试将大脑的自然语言指令匹配到纯脚本或简单API调用。
     返回 (handled: bool, result: dict)
     """
+    instruction = instruction.strip()
 
-    instruction_lower = instruction.lower().strip()
+    # 说话优先: 防止 '说:今天不挖矿了' 被任务词劫持
+    if instruction.startswith("说:") or instruction.startswith("说："):
+        msg = instruction.split(":", 1)[-1].split("：", 1)[-1].strip()
+        api.chat(msg)
+        return True, {"ok": True, "action": f"chat: {msg}"}
 
-    # 匹配脚本任务
+    # 匹配脚本任务(带否定检测)
     for keyword, (script, default_args) in SCRIPT_TASKS.items():
-        if keyword in instruction:
-            result = run_script(script, default_args)
+        if keyword in instruction and not _negated(instruction, keyword):
+            result = run_script(script, default_args, port=port)
             return True, result
 
     # 简单动作
@@ -99,12 +121,6 @@ def execute_simple(instruction):
     if "卖东西" in instruction or "出货" in instruction:
         api.sell(sell_all=True)
         return True, {"ok": True, "action": "sell all"}
-
-    # 说话（聊天气泡）
-    if instruction.startswith("说:") or instruction.startswith("说："):
-        msg = instruction.split(":", 1)[-1].split("：", 1)[-1].strip()
-        api.chat(msg)
-        return True, {"ok": True, "action": f"chat: {msg}"}
 
     return False, {}
 
@@ -268,9 +284,10 @@ def execute(instruction, config=None):
     config: {"executor_api_key": str, "executor_provider": str, "executor_model": str, "port": int}
     """
     config = config or {}
+    port = config.get("port", 7842)
 
     # 第一步：尝试纯脚本
-    handled, result = execute_simple(instruction)
+    handled, result = execute_simple(instruction, port=port)
     if handled:
         return result
 
