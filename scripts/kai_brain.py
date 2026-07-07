@@ -210,12 +210,15 @@ def _call_astrbot(prompt, config):
         if r.status_code != 200:
             print(f"[大脑/astrbot] HTTP {r.status_code}: {r.text[:200]}")
             return None
-        # 解析SSE: 拼接所有 data: 行里的文本增量
+        # 解析SSE: 拼接所有 data: 行里的文本增量 (强制utf-8, 防latin-1乱码)
         chunks = []
-        for raw in r.iter_lines(decode_unicode=True):
-            if not raw or not raw.startswith("data:"):
+        for raw in r.iter_lines():
+            if not raw:
                 continue
-            payload = raw[5:].strip()
+            line = raw.decode("utf-8", errors="replace")
+            if not line.startswith("data:"):
+                continue
+            payload = line[5:].strip()
             if payload in ("[DONE]", ""):
                 continue
             try:
@@ -226,7 +229,9 @@ def _call_astrbot(prompt, config):
                 if isinstance(piece, str):
                     chunks.append(piece)
             except json.JSONDecodeError:
-                chunks.append(payload)  # 有的实现直接发纯文本
+                # 长得像JSON但坏了的分片直接丢弃, 只有纯文本行才拼进去
+                if not payload.startswith("{"):
+                    chunks.append(payload)
         return "".join(chunks)
     except Exception as e:
         print(f"[大脑/astrbot] 连接失败: {e}")
