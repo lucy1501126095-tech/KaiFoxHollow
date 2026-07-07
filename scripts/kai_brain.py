@@ -37,9 +37,10 @@ STANDARD_TASKS = "浇水/种田/收割/砍树/开垦/挖矿/撸动物/酿酒/熔
 DEFAULT_CONFIG = {
     # 大脑（贵，只在关键时刻用）
     "brain_api_key": "",
-    "brain_provider": "claude",         # claude / deepseek / openai / custom
+    "brain_provider": "claude",         # claude / deepseek / openai / custom / astrbot
     "brain_model": "claude-opus-4-6",   # 省钱可换 claude-sonnet-4-6, 游戏决策绰绰有余
-    "brain_base_url": "",               # provider=custom时填OpenAI兼容地址(如AstrBot/中转)
+    "brain_base_url": "",               # custom=OpenAI兼容地址; astrbot=AstrBot地址(如 http://localhost:6185)
+    "astrbot_session_id": "stardew_farm",  # astrbot模式: 农场专用会话, 与QQ会话隔离但共享人格与记忆
 
     # 手脚（便宜，频繁执行用）
     "executor_api_key": "",
@@ -184,6 +185,54 @@ def _validate_decision(decision):
     return {"plan": plan, "say": say, "mood": mood}
 
 
+def _call_astrbot(prompt, config):
+    """
+    走AstrBot开发者OpenAPI (POST /api/v1/chat, SSE流式)。
+    进的是AstrBot完整管线: 人格 + Mnemosyne记忆 + 插件, 与QQ端同一颗心脏。
+    需要: WebUI里生成带chat scope的开发者API Key。
+    返回完整文本, 失败返回None。
+    """
+    base = (config.get("brain_base_url") or "http://localhost:6185").rstrip("/")
+    session_id = config.get("astrbot_session_id", "stardew_farm")
+    api_key = config.get("brain_api_key", "")
+
+    body = {
+        "username": "kai_farm_body",
+        "session_id": session_id,
+        "message": [{"type": "plain", "text": prompt}],
+        "enable_streaming": True,
+    }
+    headers = {"Content-Type": "application/json",
+               "Authorization": f"Bearer {api_key}"}
+    try:
+        r = requests.post(f"{base}/api/v1/chat", json=body,
+                          headers=headers, timeout=120, stream=True)
+        if r.status_code != 200:
+            print(f"[大脑/astrbot] HTTP {r.status_code}: {r.text[:200]}")
+            return None
+        # 解析SSE: 拼接所有 data: 行里的文本增量
+        chunks = []
+        for raw in r.iter_lines(decode_unicode=True):
+            if not raw or not raw.startswith("data:"):
+                continue
+            payload = raw[5:].strip()
+            if payload in ("[DONE]", ""):
+                continue
+            try:
+                obj = json.loads(payload)
+                # 兼容多种字段命名: delta/text/content/completion_text
+                piece = (obj.get("delta") or obj.get("text")
+                         or obj.get("content") or obj.get("completion_text") or "")
+                if isinstance(piece, str):
+                    chunks.append(piece)
+            except json.JSONDecodeError:
+                chunks.append(payload)  # 有的实现直接发纯文本
+        return "".join(chunks)
+    except Exception as e:
+        print(f"[大脑/astrbot] 连接失败: {e}")
+        return None
+
+
 def call_brain(state_card, event_type, event_data, memory, config):
     """唤醒大脑。返回 {"plan": [...], "say": "...", "mood": "..."}"""
     persona = config.get("persona", "")
@@ -208,7 +257,11 @@ def call_brain(state_card, event_type, event_data, memory, config):
 
     text = ""
     try:
-        if provider == "claude":
+        if provider == "astrbot":
+            text = _call_astrbot(prompt, config)
+            if text is None:
+                return {"plan": [], "say": "", "mood": "出错"}
+        elif provider == "claude":
             headers = {
                 "Content-Type": "application/json",
                 "x-api-key": api_key,
