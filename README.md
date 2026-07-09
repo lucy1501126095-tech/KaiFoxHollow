@@ -64,7 +64,7 @@ For chatting with an LLM directly in-game. No external tools required.
 
 | Provider | URL | Model |
 |----------|-----|-------|
-| DeepSeek | `https://api.deepseek.com/v1/chat/completions` | `deepseek-chat` |
+| DeepSeek | `https://api.deepseek.com/v1/chat/completions` | `deepseek-v4-flash` |
 | Claude | `https://api.anthropic.com/v1/messages` | `claude-sonnet-4-6-20250514` |
 | OpenAI | `https://api.openai.com/v1/chat/completions` | `gpt-4o` |
 | Custom | Any OpenAI-compatible endpoint | Any model name |
@@ -79,7 +79,7 @@ The provider is auto-detected from the URL. Custom URLs use OpenAI-compatible fo
   "ApiProvider": "deepseek",
   "ApiUrl": "",
   "ApiKey": "",
-  "Model": "deepseek-chat",
+  "Model": "deepseek-v4-flash",
   "SystemPrompt": "You are a friendly AI companion in Stardew Valley...",
   "MaxHistoryMessages": 20
 }

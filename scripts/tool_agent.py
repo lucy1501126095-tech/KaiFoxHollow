@@ -38,10 +38,10 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 DEFAULT_MODELS = {
     "claude": "claude-sonnet-4-6-20250514",
-    "deepseek": "deepseek-chat",
+    "deepseek": "deepseek-v4-flash",
     "openai": "gpt-4o",
 }
-MODEL = args.model or DEFAULT_MODELS.get(args.provider, "deepseek-chat")
+MODEL = args.model or DEFAULT_MODELS.get(args.provider, "deepseek-v4-flash")
 
 SYSTEM_PROMPT = """You are an AI companion playing Stardew Valley through the NagiBridge mod.
 You can see the game state and control the farmer using tools.
