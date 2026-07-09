@@ -112,8 +112,7 @@ def main():
 
     config = dict(kai_brain.DEFAULT_CONFIG)
     config.update({"port": GAME_PORT, "ear_port": EAR_PORT,
-                   "brain_api_key": "test", "memory_file": "/tmp/test_kai_memory.json"})
-    import os
+                   "brain_api_key": "test", "memory_file": os.path.join(tempfile.gettempdir(), "test_kai_memory.json")})
     if os.path.exists(config["memory_file"]):
         os.remove(config["memory_file"])
 

@@ -131,8 +131,11 @@ def save_memory(memory, config):
     path = config.get("memory_file", "kai_memory.json")
     if len(memory.get("days", [])) > 3:
         memory["days"] = memory["days"][-3:]
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(memory, f, ensure_ascii=False, indent=2)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(memory, f, ensure_ascii=False, indent=2)
+    except OSError as e:
+        print(f"[记忆] 写盘失败(不影响运行): {e}")
 
 
 def memory_to_text(memory):
@@ -466,6 +469,18 @@ class KaiBrain:
 
             results = []
             i = 0
+            try:
+                self._run_tasks(plan, gen, results)
+            except Exception as e:
+                print(f"[手脚] 执行循环异常(计划中止): {type(e).__name__}: {e}")
+                with self._plan_lock:
+                    if self.plan_generation == gen:
+                        self.current_plan = []
+            # 旧的内联循环已抽为 _run_tasks; 保留下方结构由其内部处理
+            continue
+
+    def _run_tasks(self, plan, gen, results):
+            i = 0
             while i < len(plan) and self.running:
                 with self._plan_lock:
                     if self.plan_generation != gen:
@@ -558,7 +573,10 @@ class KaiBrain:
             try:
                 event_type, event_data = self.events.get(timeout=1)
                 print(f"\n[事件] {event_type}")
-                self.wake_brain(event_type, event_data)
+                try:
+                    self.wake_brain(event_type, event_data)
+                except Exception as e:
+                    print(f"[大脑] 唤醒异常(跳过本次): {type(e).__name__}: {e}")
             except queue.Empty:
                 pass
             # 每5秒轮询一次游戏状态
