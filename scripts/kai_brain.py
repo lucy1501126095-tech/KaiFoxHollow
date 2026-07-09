@@ -523,7 +523,10 @@ class KaiBrain:
     def run(self):
         self.running = True
         port = self.config.get("port", 7842)
-        api.BASE_URL = f"http://localhost:{port}"
+        # 用127.0.0.1而非localhost: 避开Windows上IPv6解析/系统代理的坑
+        # NO_PROXY确保本机请求永不走代理(挂梯子的机器上requests默认会读系统代理)
+        os.environ["NO_PROXY"] = os.environ["no_proxy"] = "127.0.0.1,localhost"
+        api.BASE_URL = f"http://127.0.0.1:{port}"
         os.environ["NAGI_URL"] = api.BASE_URL   # 传给所有子脚本
 
         ear_port = self.config.get("ear_port", 7845)

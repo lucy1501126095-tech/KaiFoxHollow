@@ -14,8 +14,10 @@ kai_brain v2 端到端测试(不需要真游戏、不花token)。
 """
 
 import json
+import os
 import threading
 import time
+os.environ["NO_PROXY"] = os.environ["no_proxy"] = "127.0.0.1,localhost"
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import requests
@@ -120,10 +122,12 @@ def main():
     t.start()
 
     # ── 场景1: 等new_day唤醒并进入执行 ──
-    deadline = time.time() + 10
+    deadline = time.time() + 30
     while time.time() < deadline and not executed:
         time.sleep(0.1)
-    assert wake_log and wake_log[0][0] == "new_day", f"首次唤醒应为new_day, 实际:{wake_log}"
+    assert wake_log and wake_log[0][0] == "new_day", (
+        f"首次唤醒应为new_day, 实际:{wake_log} | executed:{executed} | "
+        f"提示: 若两者皆空, 多半是本机HTTP被代理/防火墙拦截")
     print("✅ 1. new_day 唤醒并开始执行计划")
 
     # ── 场景2+3: 干活中喊他, 必须立刻听见 ──
