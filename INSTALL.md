@@ -5,7 +5,7 @@
 ## 前置条件
 
 - Stardew Valley + [SMAPI](https://smapi.io/) 已安装
-- NagiBridge mod 已在 `Stardew Valley/Mods/NagiBridge/`（之前装过就不用动，**这次更新纯Python侧，DLL不需要重新编译**）
+- NagiBridge mod 已部署（没有？见下面"一点五"节，从零装起）
 - Python 3.8+，装好 requests：`pip install requests`
 - 两个API key：大脑用的（Claude）+ 手脚用的（DeepSeek便宜够用）
 
@@ -17,7 +17,23 @@ git pull origin main        # 已有仓库
 git clone https://github.com/lucy1501126095-tech/KaiFoxHollow.git
 ```
 
-确认最新commit是 `97f6151`（kai brain v2）。
+没有git就在仓库页面点绿色 **Code** 按钮 → **Download ZIP**，解压到顺手的位置（如 `D:\KaiFoxHollow`）。
+
+确认最新commit是教程更新之后的（tag `v2.0.0` 及以后）。
+
+## 一点五、游戏是新装的？先过这三关
+
+游戏刚重装（无SMAPI无Mods）的话，先走这节；mod早就装好的直接跳到第二节。
+
+**关1 装SMAPI**：去 [smapi.io](https://smapi.io/) 下载，解压后运行 `install on Windows.bat`，选重装后的游戏目录。装完把安装器最后给出的那行启动参数复制进 Steam（游戏右键 → 属性 → 启动选项），以后从Steam点也自动带SMAPI。
+
+**关2 编译NagiBridge.dll**：
+1. 需要 .NET 6 SDK。cmd里 `dotnet --list-sdks` 查，列表里有 `6.x` 就行；没有去 [dotnet官网](https://dotnet.microsoft.com/download/dotnet/6.0) 装
+2. ⚠️ **路径坑**：`NagiBridge.csproj` 里游戏DLL的引用路径写死为 `D:\xiazai\steamapps\common\Stardew Valley`。重装后路径没变就跳过；变了就用记事本打开csproj，把几处 `<HintPath>` 的路径前缀改成新的游戏目录
+3. 在仓库目录执行 `dotnet build -c Release`
+4. 产物在 `bin\Release\net6.0\NagiBridge.dll`
+
+**关3 部署mod**：游戏目录 `Mods\` 下新建 `NagiBridge` 文件夹，拷两个文件进去——刚编译的 `NagiBridge.dll` + 仓库根目录的 `manifest.json`。开一次游戏验证：SMAPI黑色控制台里能看到 NagiBridge 加载并启动HTTP服务的日志。
 
 ## 二、先自检（不开游戏、不花token）
 
