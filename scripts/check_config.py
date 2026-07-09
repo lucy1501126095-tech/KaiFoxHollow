@@ -55,6 +55,9 @@ def main():
     if provider == "astrbot":
         base = (config.get("brain_base_url") or "http://localhost:6185").rstrip("/")
         print(f"\n→ 正在连接 AstrBot: {base} (体检专用会话, 不进农场历史)")
+        for v in ("HTTP_PROXY","HTTPS_PROXY","ALL_PROXY","http_proxy","https_proxy","all_proxy"):
+            if os.environ.pop(v, None) is not None:
+                print(f"  (发现并临时清除环境变量代理: {v})")
         import kai_brain
         cfg = dict(config)
         cfg["astrbot_session_id"] = "kai_config_check"

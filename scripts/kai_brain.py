@@ -40,6 +40,7 @@ DEFAULT_CONFIG = {
     "brain_provider": "claude",         # claude / deepseek / openai / custom / astrbot
     "brain_model": "claude-opus-4-6",   # 省钱可换 claude-sonnet-4-6, 游戏决策绰绰有余
     "brain_base_url": "",               # custom=OpenAI兼容地址; astrbot=AstrBot地址(如 http://localhost:6185)
+    "brain_trust_env": False,           # False=大脑请求无视一切系统/环境变量代理(直连自家VPS推荐); 需走代理才改True
     "astrbot_session_id": "stardew_farm",  # astrbot模式: 农场专用会话, 与QQ会话隔离但共享人格与记忆
 
     # 手脚（便宜，频繁执行用）
@@ -208,8 +209,10 @@ def _call_astrbot(prompt, config):
     headers = {"Content-Type": "application/json",
                "Authorization": f"Bearer {api_key}"}
     try:
-        r = requests.post(f"{base}/api/v1/chat", json=body,
-                          headers=headers, timeout=120, stream=True)
+        s = requests.Session()
+        s.trust_env = bool(config.get("brain_trust_env", False))  # 默认免疫代理污染
+        r = s.post(f"{base}/api/v1/chat", json=body,
+                   headers=headers, timeout=120, stream=True)
         if r.status_code != 200:
             print(f"[大脑/astrbot] HTTP {r.status_code}: {r.text[:200]}")
             return None
