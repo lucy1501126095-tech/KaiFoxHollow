@@ -45,7 +45,7 @@ DEFAULT_CONFIG = {
     # 手脚（便宜，频繁执行用）
     "executor_api_key": "",
     "executor_provider": "deepseek",    # deepseek / openai / claude / custom
-    "executor_model": "deepseek-chat",
+    "executor_model": "deepseek-v4-flash",
     "executor_base_url": "",            # provider=custom时的OpenAI兼容地址
 
     # 游戏连接

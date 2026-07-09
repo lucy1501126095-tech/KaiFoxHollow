@@ -142,11 +142,11 @@ def execute_with_light_model(instruction, api_key, provider="deepseek",
     )
 
     default_models = {
-        "deepseek": "deepseek-chat",
+        "deepseek": "deepseek-v4-flash",
         "openai": "gpt-4o-mini",
         "claude": "claude-haiku-4-5-20251001",
     }
-    model = model or default_models.get(provider, "deepseek-chat")
+    model = model or default_models.get(provider, "deepseek-v4-flash")
 
     system = (
         "你是一个星露谷物语的操作执行器。"
