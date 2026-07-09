@@ -15,6 +15,7 @@ kai_brain v2 端到端测试(不需要真游戏、不花token)。
 
 import json
 import os
+import tempfile
 import threading
 import time
 os.environ["NO_PROXY"] = os.environ["no_proxy"] = "127.0.0.1,localhost"
