@@ -229,11 +229,20 @@ def _call_astrbot(prompt, config):
                 continue
             try:
                 obj = json.loads(payload)
-                # 兼容多种字段命名: delta/text/content/completion_text
-                piece = (obj.get("delta") or obj.get("text")
-                         or obj.get("content") or obj.get("completion_text") or "")
-                if isinstance(piece, str):
-                    chunks.append(piece)
+                t = obj.get("type", "")
+                if t == "complete":
+                    # AstrBot SSE: type=complete 是最终完整文本
+                    chunks.clear()
+                    chunks.append(obj.get("data", ""))
+                elif t == "plain" and obj.get("streaming"):
+                    # AstrBot SSE: type=plain + streaming=true 是流式增量
+                    chunks.append(obj.get("data", ""))
+                else:
+                    # 兼容其他provider的SSE格式
+                    piece = (obj.get("delta") or obj.get("text")
+                             or obj.get("content") or obj.get("completion_text") or "")
+                    if isinstance(piece, str) and piece:
+                        chunks.append(piece)
             except json.JSONDecodeError:
                 # 长得像JSON但坏了的分片直接丢弃, 只有纯文本行才拼进去
                 if not payload.startswith("{"):
