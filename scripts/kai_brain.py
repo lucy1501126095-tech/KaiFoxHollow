@@ -492,6 +492,22 @@ class KaiBrain:
         if health / max_health < 0.3:
             self.emit("low_health", None)
 
+    def _poll_chat_alerts(self):
+        """收游戏内聊天: mod侧CheckChatMessages把玩家消息以type=chat入队, 这里取走变成player_chat事件。"""
+        try:
+            alerts = api.alerts(peek=False)
+        except Exception:
+            return
+        if not isinstance(alerts, list):
+            alerts = alerts.get("alerts", []) if isinstance(alerts, dict) else []
+        for a in alerts:
+            if not isinstance(a, dict):
+                continue
+            if a.get("type") == "chat":
+                msg = str(a.get("message", "")).strip()
+                if msg:
+                    self.events.put(("player_chat", {"message": msg}))
+
     def _check_festival(self):
         try:
             f = requests.get(f"{api.BASE_URL}/festival", timeout=5).json()
@@ -636,6 +652,8 @@ class KaiBrain:
                     print(f"[大脑] 唤醒异常(跳过本次): {type(e).__name__}: {e}")
             except queue.Empty:
                 pass
+            # 每圈收一次游戏内聊天(耳蜗: mod把玩家聊天推进alert队列)
+            self._poll_chat_alerts()
             # 每5秒轮询一次游戏状态
             if time.time() - last_poll >= 5:
                 last_poll = time.time()

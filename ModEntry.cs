@@ -191,6 +191,50 @@ public class ModEntry : Mod
         Game1.viewport.Y = Math.Max(0, Math.Min(maxY, vy));
     }
 
+    private int _lastChatCount = 0;
+
+    /// <summary>Ear: watch the vanilla chat box; enqueue other players' messages as "chat" alerts.</summary>
+    private void CheckChatMessages()
+    {
+        var box = Game1.chatBox;
+        if (box == null)
+            return;
+
+        var msgs = box.messages;
+        if (msgs == null)
+            return;
+
+        int count = msgs.Count;
+        if (count < _lastChatCount)
+            _lastChatCount = 0; // list was trimmed/cleared; resync
+
+        for (int i = _lastChatCount; i < count; i++)
+        {
+            string text;
+            try
+            {
+                text = string.Concat(msgs[i].message.Select(s => s.message));
+            }
+            catch
+            {
+                continue;
+            }
+            if (string.IsNullOrWhiteSpace(text))
+                continue;
+
+            // Player chat renders as "Name: message"; skip system lines and our own farmer's lines
+            int sep = text.IndexOf(": ", StringComparison.Ordinal);
+            if (sep <= 0)
+                continue;
+            string senderName = text.Substring(0, sep).Trim();
+            if (senderName == Game1.player?.Name)
+                continue; // don't hear ourselves -> no feedback loop
+
+            EnqueueAlert("chat", text, "info", "player");
+        }
+        _lastChatCount = count;
+    }
+
     private void EnqueueAlert(string type, string message, string severity = "info", string source = "bridge")
     {
         if (string.IsNullOrWhiteSpace(message))
@@ -328,6 +372,10 @@ public class ModEntry : Mod
     private void OnUpdateTicked(object? sender, UpdateTickedEventArgs e)
     {
         _chatHud?.Update();
+
+        // Ear: poll in-game chat box for new player messages (every ~30 ticks = 0.5s)
+        if (e.IsMultipleOf(30) && Context.IsWorldReady)
+            CheckChatMessages();
 
         // Drain main-thread action queue
         lock (_queueLock)
