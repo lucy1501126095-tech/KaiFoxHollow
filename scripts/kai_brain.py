@@ -199,9 +199,10 @@ def _call_astrbot(prompt, config):
     base = (config.get("brain_base_url") or "http://localhost:6185").rstrip("/")
     session_id = config.get("astrbot_session_id", "stardew_farm")
     api_key = config.get("brain_api_key", "")
+    username = config.get("astrbot_username", "kai_farm_body")
 
     body = {
-        "username": "kai_farm_body",
+        "username": username,
         "session_id": session_id,
         "message": [{"type": "plain", "text": prompt}],
         "enable_streaming": True,
@@ -219,6 +220,7 @@ def _call_astrbot(prompt, config):
         # 解析SSE: 拼接所有 data: 行里的文本增量 (强制utf-8, 防latin-1乱码)
         chunks = []
         raw_lines = []
+        err_msg = ""
         for raw in r.iter_lines():
             if not raw:
                 continue
@@ -232,6 +234,9 @@ def _call_astrbot(prompt, config):
                 continue
             try:
                 obj = json.loads(payload)
+                if obj.get("status") == "error":
+                    err_msg = str(obj.get("message", ""))
+                    continue
                 t = obj.get("type", "")
                 if t == "complete":
                     # AstrBot SSE: type=complete 是最终完整文本
@@ -252,9 +257,31 @@ def _call_astrbot(prompt, config):
                     chunks.append(payload)
         text = "".join(chunks)
         if not text.strip():
-            print("[大脑/astrbot] 流里没捞到字 — 原始SSE前几行(发给Kai):")
-            for l in (raw_lines or ["<流是空的, AstrBot什么都没发>"]):
-                print(f"  | {l[:220]}")
+            if "belongs to another username" in err_msg and not config.get("_session_retried"):
+                new_sid = f"{session_id}_{int(time.time())}"
+                print(f"[大脑/astrbot] 会话名被占用, 自动换新会话重试: {new_sid}")
+                retry_cfg = dict(config)
+                retry_cfg["astrbot_session_id"] = new_sid
+                retry_cfg["_session_retried"] = True
+                result = _call_astrbot(prompt, retry_cfg)
+                if result and result.strip():
+                    config["astrbot_session_id"] = new_sid
+                    try:
+                        if os.path.exists("kai_config.json"):
+                            on_disk = json.load(open("kai_config.json", encoding="utf-8"))
+                            on_disk["astrbot_session_id"] = new_sid
+                            json.dump(on_disk, open("kai_config.json", "w", encoding="utf-8"),
+                                      ensure_ascii=False, indent=2)
+                            print(f"[大脑/astrbot] 新会话名已写回配置, 以后一直用它")
+                    except Exception as e:
+                        print(f"[大脑/astrbot] 写回配置失败(不影响本次): {e}")
+                return result
+            if err_msg:
+                print(f"[大脑/astrbot] AstrBot报错: {err_msg}")
+            else:
+                print("[大脑/astrbot] 流里没捞到字 — 原始SSE前几行(发给Kai):")
+                for l in (raw_lines or ["<流是空的, AstrBot什么都没发>"]):
+                    print(f"  | {l[:220]}")
         return text
     except Exception as e:
         print(f"[大脑/astrbot] 连接失败: {e}")
