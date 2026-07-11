@@ -222,14 +222,18 @@ public class ModEntry : Mod
             if (string.IsNullOrWhiteSpace(text))
                 continue;
 
-            // Player chat renders as "Name: message"; skip system lines and our own farmer's lines
-            int sep = text.IndexOf(": ", StringComparison.Ordinal);
+            // Player chat renders as "Name: message" (or localized colon); skip system lines and our own farmer's lines
+            int sep = text.IndexOfAny(new[] { ':', '：' });
             if (sep <= 0)
+            {
+                Monitor.Log($"[ear] skip (no name prefix): {text}", LogLevel.Info);
                 continue;
+            }
             string senderName = text.Substring(0, sep).Trim();
             if (senderName == Game1.player?.Name)
                 continue; // don't hear ourselves -> no feedback loop
 
+            Monitor.Log($"[ear] heard <{senderName}>: {text}", LogLevel.Info);
             EnqueueAlert("chat", text, "info", "player");
         }
         _lastChatCount = count;
