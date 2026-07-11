@@ -110,10 +110,24 @@ def build_state_card():
     location = s.get("location", {})
     time_info = s.get("time", {})
 
+    def _fmt_tod(v):
+        # 星露谷timeOfDay整数: 600=6:00, 1330=13:30, 2600=次日2:00
+        try:
+            v = int(v)
+            h, m = divmod(v, 100)
+            suffix = ""
+            if h >= 24:
+                h -= 24
+                suffix = "(次日)"
+            return f"{h}:{m:02d}{suffix}"
+        except (TypeError, ValueError):
+            return "?"
+
+
     # 基本信息
     season = SEASON_CN.get(time_info.get("season", ""), time_info.get("season", "?"))
-    day = time_info.get("day", "?")
-    time_str = time_info.get("time", "?")
+    day = time_info.get("day") or time_info.get("dayOfMonth") or "?"
+    time_str = time_info.get("time") or _fmt_tod(time_info.get("timeOfDay"))
     weather = WEATHER_CN.get(time_info.get("weather", ""), time_info.get("weather", "?"))
 
     # 玩家状态

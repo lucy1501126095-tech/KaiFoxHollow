@@ -218,10 +218,13 @@ def _call_astrbot(prompt, config):
             return None
         # 解析SSE: 拼接所有 data: 行里的文本增量 (强制utf-8, 防latin-1乱码)
         chunks = []
+        raw_lines = []
         for raw in r.iter_lines():
             if not raw:
                 continue
             line = raw.decode("utf-8", errors="replace")
+            if len(raw_lines) < 12:
+                raw_lines.append(line)
             if not line.startswith("data:"):
                 continue
             payload = line[5:].strip()
@@ -247,7 +250,12 @@ def _call_astrbot(prompt, config):
                 # 长得像JSON但坏了的分片直接丢弃, 只有纯文本行才拼进去
                 if not payload.startswith("{"):
                     chunks.append(payload)
-        return "".join(chunks)
+        text = "".join(chunks)
+        if not text.strip():
+            print("[大脑/astrbot] 流里没捞到字 — 原始SSE前几行(发给Kai):")
+            for l in (raw_lines or ["<流是空的, AstrBot什么都没发>"]):
+                print(f"  | {l[:220]}")
+        return text
     except Exception as e:
         print(f"[大脑/astrbot] 连接失败: {e}")
         return None
