@@ -553,7 +553,8 @@ class KaiBrain:
         # 用127.0.0.1而非localhost: 避开Windows上IPv6解析/系统代理的坑
         # NO_PROXY确保本机请求永不走代理(挂梯子的机器上requests默认会读系统代理)
         os.environ["NO_PROXY"] = os.environ["no_proxy"] = "127.0.0.1,localhost"
-        api.BASE_URL = f"http://127.0.0.1:{port}"
+        # 必须用localhost: mod端HttpListener按hostname匹配, 用127.0.0.1会被http.sys回400
+        api.BASE_URL = f"http://localhost:{port}"
         os.environ["NAGI_URL"] = api.BASE_URL   # 传给所有子脚本
 
         ear_port = self.config.get("ear_port", 7845)
@@ -631,7 +632,10 @@ class KaiBrain:
     def stop(self):
         self.running = False
         if self._ear_server:
-            self._ear_server.shutdown()
+            try:
+                self._ear_server.server_close()  # 直接关socket, 避免shutdown()在退出时死锁
+            except Exception:
+                pass
 
 
 # ══════════════════════════════════════

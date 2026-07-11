@@ -47,7 +47,7 @@ def run_script(script_name, extra_args="", port=7842):
     env = {**os.environ,
            "PYTHONIOENCODING": "utf-8",
            "NO_PROXY": "127.0.0.1,localhost", "no_proxy": "127.0.0.1,localhost",
-           "NAGI_URL": f"http://127.0.0.1:{port}"}
+           "NAGI_URL": f"http://localhost:{port}"}
     try:
         result = subprocess.run(
             cmd, capture_output=True, text=True, timeout=300, env=env

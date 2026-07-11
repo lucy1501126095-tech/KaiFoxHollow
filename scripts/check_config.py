@@ -125,9 +125,9 @@ def main():
         print(f"{SKIP} executor_api_key为空, 跳过手脚检查")
 
     # ── 4. 游戏端口 ──
-    print(f"\n→ 探一下游戏 (127.0.0.1:{port})")
+    print(f"\n→ 探一下游戏 (localhost:{port})")
     try:
-        s = requests.get(f"http://127.0.0.1:{port}/status", timeout=3).json()
+        s = requests.get(f"http://localhost:{port}/status", timeout=3).json()
         print(f"{OK} 游戏在线! worldReady={s.get('worldReady')}")
     except Exception:
         print(f"{SKIP} 游戏没开 — 正常, 开机时它自己会等")

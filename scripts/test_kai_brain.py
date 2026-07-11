@@ -71,7 +71,7 @@ class MockGame(BaseHTTPRequestHandler):
 
 
 def start_mock_game():
-    srv = ThreadingHTTPServer(("127.0.0.1", GAME_PORT), MockGame)
+    srv = ThreadingHTTPServer(("", GAME_PORT), MockGame)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     return srv
 
