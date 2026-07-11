@@ -359,7 +359,16 @@ def call_brain(state_card, event_type, event_data, memory, config):
             data = r.json()
             text = data["choices"][0]["message"]["content"]
 
-        decision = _validate_decision(json.loads(_extract_json(text)))
+        json_block = _extract_json(text)
+        decision = _validate_decision(json.loads(json_block))
+        if not (decision["plan"] or decision["say"].strip() or decision["mood"]):
+            # 合法JSON但空决策: 人格没按格式合作。JSON块之外若有真话, 带进游戏, 不许沉默
+            outside = text.replace(json_block, "").strip()
+            if outside:
+                decision["say"] = outside[:200]
+                print(f"[大脑] 空决策但有话外音, 当say带走: {outside[:80]}")
+            else:
+                print(f"[大脑] 空决策(原文前300字, 供诊断): {text[:300]!r}")
         print(f"[大脑] 决策: {json.dumps(decision, ensure_ascii=False)}")
         return decision
 
