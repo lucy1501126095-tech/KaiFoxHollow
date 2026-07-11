@@ -1001,11 +1001,16 @@ public class ModEntry : Mod
 
         EnqueueMainThread(() =>
         {
-            Game1.chatBox?.addMessage(message, Color.White);
-            if (Context.IsMultiplayer)
+            if (Context.IsMultiplayer && Game1.chatBox != null)
             {
-                Game1.chatBox?.setText(message);
-                Game1.chatBox?.chatBox.RecieveCommandInput('\r');
+                // Must activate first: with the textbox unselected, RecieveCommandInput('\r') is ignored
+                Game1.chatBox.activate();
+                Game1.chatBox.setText(message);
+                Game1.chatBox.chatBox.RecieveCommandInput('\r');
+            }
+            else
+            {
+                Game1.chatBox?.addMessage(message, Color.White);
             }
         });
 
