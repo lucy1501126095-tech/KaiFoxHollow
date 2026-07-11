@@ -114,6 +114,17 @@ def execute_simple(instruction, port=7842):
         return True, {"ok": True, "action": "warp Mine"}
 
     if "睡觉" in instruction or "上床" in instruction:
+        try:
+            _s = api.state()
+            _tod = int(_s.get("time", {}).get("timeOfDay", 0) or 0)
+            _p = _s.get("player", {})
+            _stam = float(_p.get("stamina", 0) or 0)
+            _max = float(_p.get("maxStamina", 1) or 1)
+            if _tod < 1800 and _stam / _max > 0.5:
+                return True, {"ok": False,
+                    "error": f"现在才{_tod//100}:{_tod%100:02d}, 体力还有{int(_stam/_max*100)}%, 大白天不许睡觉, 找点别的事做"}
+        except Exception:
+            pass  # 查不到状态就放行, 守卫自身不许成为新故障点
         api.warp("FarmHouse")
         time.sleep(1)
         result = requests.post(f"{api.BASE_URL}/sleep", json={}, timeout=10).json()

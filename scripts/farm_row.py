@@ -19,9 +19,9 @@ import argparse
 import os
 
 parser = argparse.ArgumentParser()
-parser.add_argument("start_x", type=int)
-parser.add_argument("start_y", type=int)
-parser.add_argument("length", type=int)
+parser.add_argument("start_x", type=int, nargs="?", default=None)
+parser.add_argument("start_y", type=int, nargs="?", default=None)
+parser.add_argument("length", type=int, nargs="?", default=6)
 parser.add_argument("--seed", default="Parsnip Seeds")
 parser.add_argument("--dir", default="right", choices=["right", "left", "down", "up"])
 parser.add_argument("--rows", type=int, default=1)
@@ -32,6 +32,16 @@ args = parser.parse_args()
 
 os.environ["NAGI_URL"] = f"http://localhost:{args.port}"
 import stardew_api as api
+
+if args.start_x is None:
+    # 未给起点: 从玩家脚下旁边一格开始种
+    _s = api.state()
+    _p = _s.get("player", {})
+    args.start_x, args.start_y = int(_p.get("x", 0)) + 1, int(_p.get("y", 0))
+    print(f"[farm] no coords given -> starting beside player at ({args.start_x},{args.start_y}), length {args.length}")
+elif args.start_y is None:
+    print("[farm] error: give both start_x start_y (length optional) or none at all")
+    raise SystemExit(2)
 
 TOOL_DELAY = 0.55
 STAMINA_THRESHOLD = 0.15

@@ -22,16 +22,30 @@ import time
 from collections import defaultdict
 
 parser = argparse.ArgumentParser()
-parser.add_argument("x1", type=int)
-parser.add_argument("y1", type=int)
-parser.add_argument("x2", type=int)
-parser.add_argument("y2", type=int)
+parser.add_argument("x1", type=int, nargs="?", default=None)
+parser.add_argument("y1", type=int, nargs="?", default=None)
+parser.add_argument("x2", type=int, nargs="?", default=None)
+parser.add_argument("y2", type=int, nargs="?", default=None)
+parser.add_argument("--around", type=int, default=4,
+                    help="未给坐标时: 以玩家为中心清理该半径的方形区域")
 parser.add_argument("--port", type=int, default=7842)
 parser.add_argument("--hits", type=int, default=2)
 args = parser.parse_args()
 
 os.environ["NAGI_URL"] = f"http://localhost:{args.port}"
 import stardew_api as api
+
+if args.x1 is None:
+    # 未给坐标: 以玩家当前位置为中心, 清理 around 半径的方形区域
+    _s = api.state()
+    _p = _s.get("player", {})
+    _px, _py = int(_p.get("x", 0)), int(_p.get("y", 0))
+    args.x1, args.y1 = _px - args.around, _py - args.around
+    args.x2, args.y2 = _px + args.around, _py + args.around
+    print(f"[clear] no coords given -> clearing around player: ({args.x1},{args.y1})-({args.x2},{args.y2})")
+elif None in (args.y1, args.x2, args.y2):
+    print("[clear] error: give all four coords (x1 y1 x2 y2) or none at all")
+    raise SystemExit(2)
 
 TOOL_DELAY = 0.55
 STAMINA_MIN = 12

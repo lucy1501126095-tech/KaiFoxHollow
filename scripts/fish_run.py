@@ -133,8 +133,8 @@ def run(port, location, max_fish, stamina_threshold):
             rod_found = True
             break
     if not rod_found:
-        log("no fishing rod found!")
-        return
+        log("no fishing rod found! (need to buy one at Willy's shop, ~500g)")
+        sys.exit(1)  # 真失败: 让大脑知道没竿, 而不是以为钓了一天鱼
 
     # warp to fishing spot
     bot.warp("Farm")
