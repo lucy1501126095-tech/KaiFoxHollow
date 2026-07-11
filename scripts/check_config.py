@@ -74,10 +74,26 @@ def main():
                 print(f"  │ {line}")
             print("  └" + "─" * 42)
         else:
-            print(f"{BAD} 没拿到回复。排查顺序:")
-            print("   1) base_url 能在浏览器打开WebUI吗(地址/端口对不对)")
-            print("   2) Key是WebUI里生成的开发者API Key且勾了chat权限吗")
-            print("   3) AstrBot版本太老可能没有OpenAPI, 更新一下")
+            print(f"{BAD} 连上了但没解析出回复 — 自动取证中, 把AstrBot的原话扒给你看:")
+            try:
+                raw = requests.post(f"{base}/api/v1/chat",
+                    headers={"Authorization": f"Bearer {config.get('brain_api_key','')}",
+                             "Content-Type": "application/json"},
+                    json={"message": "在吗", "username": "kai_config_check",
+                          "session_id": "kai_config_check"},
+                    timeout=60)
+                print(f"  HTTP {raw.status_code} | Content-Type: {raw.headers.get('Content-Type','?')}")
+                text = raw.text[:1500]
+                print("  ┌─ 原始响应(前1500字) " + "─" * 20)
+                for line in (text.splitlines() or ["<空响应>"]):
+                    print(f"  │ {line}")
+                print("  └" + "─" * 40)
+                with open("astrbot_raw_response.txt", "w", encoding="utf-8") as f:
+                    f.write(f"HTTP {raw.status_code}\nContent-Type: {raw.headers.get('Content-Type','?')}\n\n{raw.text[:5000]}")
+                print("  (完整版已存到 astrbot_raw_response.txt — 把上面方框里的内容发给Kai)")
+            except Exception as e:
+                print(f"  取证也失败了: {type(e).__name__}: {e}")
+                print("  排查: 1) base_url浏览器能开吗 2) Key带chat权限吗 3) 加速器关了吗")
     else:
         print(f"{SKIP} brain_provider={provider}, 跳过AstrBot检查")
 
