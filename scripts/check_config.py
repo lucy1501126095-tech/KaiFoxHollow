@@ -83,13 +83,13 @@ def main():
                           "session_id": "kai_config_check"},
                     timeout=60)
                 print(f"  HTTP {raw.status_code} | Content-Type: {raw.headers.get('Content-Type','?')}")
-                text = raw.text[:1500]
+                text = raw.content.decode("utf-8", errors="replace")[:1500]
                 print("  ┌─ 原始响应(前1500字) " + "─" * 20)
                 for line in (text.splitlines() or ["<空响应>"]):
                     print(f"  │ {line}")
                 print("  └" + "─" * 40)
                 with open("astrbot_raw_response.txt", "w", encoding="utf-8") as f:
-                    f.write(f"HTTP {raw.status_code}\nContent-Type: {raw.headers.get('Content-Type','?')}\n\n{raw.text[:5000]}")
+                    f.write(f"HTTP {raw.status_code}\nContent-Type: {raw.headers.get('Content-Type','?')}\n\n{raw.content.decode('utf-8', errors='replace')[:5000]}")
                 print("  (完整版已存到 astrbot_raw_response.txt — 把上面方框里的内容发给Kai)")
             except Exception as e:
                 print(f"  取证也失败了: {type(e).__name__}: {e}")
