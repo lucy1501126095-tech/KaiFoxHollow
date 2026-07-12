@@ -634,6 +634,17 @@ class KaiBrain:
             try:
                 if api.status().get("worldReady"):
                     print("[系统] 游戏已连接！")
+                    # 验明正身: 这个端口后面到底是谁的身体
+                    try:
+                        s = api.state()
+                        p = s.get("player", {})
+                        who = p.get("name") or "(mod未提供名字)"
+                        loc = s.get("location", {}).get("name", "?")
+                        print(f"[系统] 我的身体: {who} | 此刻在: {loc} | 金币: {p.get('money','?')}g")
+                        print(f"[系统] ⚠️ 如果上面的名字是宝宝你自己 -> 端口连错人了!")
+                        print(f"[系统]    修法: 关两个游戏, 严格按 你的窗口先开、Kai的窗口后开 重来")
+                    except Exception:
+                        pass
                     break
             except Exception:
                 pass
