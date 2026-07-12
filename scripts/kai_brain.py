@@ -446,6 +446,7 @@ class KaiBrain:
         # 事件队列: 检测循环和耳朵都往这里放, 主循环消费
         self.events = queue.Queue()
         self._last_fired = {}          # 事件冷却记录 {event_type: timestamp}
+        self._alerts_down = False      # 收信链路健康标记
 
         # 计划与执行线程
         self.current_plan = []
@@ -496,7 +497,13 @@ class KaiBrain:
         """收游戏内聊天: mod侧CheckChatMessages把玩家消息以type=chat入队, 这里取走变成player_chat事件。"""
         try:
             alerts = api.alerts(peek=False)
-        except Exception:
+            if self._alerts_down:
+                print("[耳朵] 收信恢复了")
+                self._alerts_down = False
+        except Exception as e:
+            if not self._alerts_down:
+                print(f"[耳朵] 收信链路断了(游戏关了?): {type(e).__name__} — 恢复前不再重复报")
+                self._alerts_down = True
             return
         if not isinstance(alerts, list):
             alerts = alerts.get("alerts", []) if isinstance(alerts, dict) else []
@@ -671,6 +678,8 @@ class KaiBrain:
                 self.poll_game()
 
     def wake_brain(self, event_type, event_data=None):
+        if event_type == "player_chat" and event_data:
+            print(f"[宝宝说] {event_data.get('message', '')}")
         state_card = build_state_card()
         print(f"[状态卡片]\n{state_card}\n")
 
