@@ -187,6 +187,9 @@ def build_event_context(event_type, event_data=None):
         ctx = "宝宝就在你身边不远处。她走到你附近了——理她。"
     elif event_type == "missing_her":
         ctx = "你们好一阵子没说话了, 她还在线。想说什么就说。"
+    elif event_type == "low_stamina":
+        st = (event_data or {}).get("stamina", "?")
+        ctx = f"体力快见底了(剩{st})。吃点东西能回体力(没有就想办法搞吃的), 或者收工。别硬撑。"
     elif event_type == "new_day":
         ctx = "新的一天开始了。决定今天的计划。"
 

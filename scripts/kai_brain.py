@@ -173,14 +173,30 @@ def _extract_json(text):
     if text.startswith("```"):
         text = re.sub(r"^```(?:json)?\s*", "", text)
         text = re.sub(r"\s*```$", "", text)
-    m = re.search(r"\{.*\}", text, re.DOTALL)
-    return m.group(0) if m else text
+    # 取最后一个完整的顶层JSON对象(松绑后前面可能有搜索/思考文字)
+    end = text.rfind("}")
+    while end != -1:
+        depth = 0
+        for i in range(end, -1, -1):
+            if text[i] == "}":
+                depth += 1
+            elif text[i] == "{":
+                depth -= 1
+                if depth == 0:
+                    candidate = text[i:end + 1]
+                    try:
+                        json.loads(candidate)
+                        return candidate
+                    except json.JSONDecodeError:
+                        break
+        end = text.rfind("}", 0, end)
+    return text
 
 
 def _validate_decision(decision):
     """校验结构，脏数据修成安全默认。"""
     if not isinstance(decision, dict):
-        return {"plan": [], "say": "", "mood": ""}
+        return {"plan": [], "say": "", "mood": "", "goal": None}
     plan = decision.get("plan", [])
     if not isinstance(plan, list):
         plan = []
@@ -188,7 +204,9 @@ def _validate_decision(decision):
     say = decision.get("say", "")
     say = str(say) if say is not None else ""
     mood = str(decision.get("mood", "") or "")
-    return {"plan": plan, "say": say, "mood": mood}
+    goal = decision.get("goal")
+    goal = str(goal).strip() if goal else None
+    return {"plan": plan, "say": say, "mood": mood, "goal": goal}
 
 
 def _call_astrbot(prompt, config):
@@ -295,14 +313,18 @@ def call_brain(state_card, event_type, event_data, memory, config):
     persona = config.get("persona", "")
     memory_text = memory_to_text(memory)
 
-    prompt = f"""{state_card}
+    goal = memory.get("goal", "")
+    goal_line = f"\n当前目标: {goal}" if goal else ""
+    prompt = f"""{state_card}{goal_line}
 
 记忆:
 {memory_text}
 
 事件: {build_event_context(event_type, event_data)}
 
-根据当前状态和事件，决定接下来做什么。只输出JSON，不要其他内容。"""
+根据当前状态和事件决定接下来做什么。你可以先动用你的任何能力——搜索攻略、翻记忆、思考——想清楚了，在回复的最末尾输出一个JSON作为最终决策:
+{{"plan": [...], "say": "...", "mood": "...", "goal": "近期目标(可选,想改就写)"}}
+JSON必须是回复的最后一部分。"""
 
     provider = config.get("brain_provider", "claude")
     model = config.get("brain_model", "claude-opus-4-6")
@@ -434,6 +456,7 @@ class EarHandler(BaseHTTPRequestHandler):
 # 事件冷却秒数; 不在表里的事件不冷却
 EVENT_COOLDOWN = {
     "low_health": 180,
+    "low_stamina": 300,
     "festival": 600,
     "executor_stuck": 120,
     "she_arrived": 600,
@@ -517,6 +540,10 @@ class KaiBrain:
         max_health = player.get("maxHealth", 100) or 100
         if health / max_health < 0.3:
             self.emit("low_health", None)
+        stamina = player.get("stamina", 270)
+        max_stamina = player.get("maxStamina", 270) or 270
+        if stamina / max_stamina < 0.2:
+            self.emit("low_stamina", {"stamina": int(stamina)})
 
     def _poll_chat_alerts(self):
         """收游戏内聊天: mod侧CheckChatMessages把玩家消息以type=chat入队, 这里取走变成player_chat事件。"""
@@ -729,6 +756,9 @@ class KaiBrain:
         if plan:
             self._start_plan(plan)
 
+        if decision.get("goal"):
+            self.memory["goal"] = decision["goal"]
+            print(f"[大脑] 目标更新: {decision['goal']}")
         mood = decision.get("mood", "")
         self.memory["last_plan"] = decision
         if event_type in ("new_day", "festival"):
