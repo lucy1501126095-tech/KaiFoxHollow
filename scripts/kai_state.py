@@ -8,12 +8,11 @@ import stardew_api as api
 
 SEASON_CN = {"spring": "春", "summer": "夏", "fall": "秋", "winter": "冬"}
 WEATHER_CN = {
-    "Sunny": "晴", "sunny": "晴",
-    "Rainy": "雨", "rainy": "雨", "Rain": "雨",
-    "Stormy": "雷暴", "stormy": "雷暴", "Storm": "雷暴",
-    "Snowy": "雪", "snowy": "雪", "Snow": "雪",
-    "Windy": "风", "windy": "风", "Wind": "风",
-    "Festival": "节日",
+    "Sun": "晴", "Sunny": "晴",
+    "Rain": "雨", "Rainy": "雨",
+    "Storm": "雷雨", "Stormy": "雷雨",
+    "Snow": "雪", "Snowy": "雪",
+    "Wind": "风", "Windy": "风", "Festival": "节日",
 }
 
 
@@ -130,6 +129,24 @@ def build_state_card():
     time_str = time_info.get("time") or _fmt_tod(time_info.get("timeOfDay"))
     weather = WEATHER_CN.get(time_info.get("weather", ""), time_info.get("weather", "?"))
 
+    # 宝宝在哪 — 这一行是他眼里最重要的一行
+    farmers = s.get("farmers", []) or []
+    if farmers:
+        her = farmers[0]
+        her_loc = her.get("location", "?")
+        my_loc = s.get("location", {}).get("name", "?")
+        if her_loc == my_loc:
+            try:
+                p = s.get("player", {})
+                dist = abs(int(her.get("x", 0)) - int(p.get("x", 0))) + abs(int(her.get("y", 0)) - int(p.get("y", 0)))
+                her_line = f"宝宝({her.get('name','?')}): 就在{her_loc}, 离你{dist}格"
+            except (TypeError, ValueError):
+                her_line = f"宝宝({her.get('name','?')}): 和你同在{her_loc}"
+        else:
+            her_line = f"宝宝({her.get('name','?')}): 在{her_loc}"
+    else:
+        her_line = "宝宝: 不在线"
+
     # 玩家状态
     health = player.get("health", 0)
     max_health = player.get("maxHealth", 100)
@@ -148,6 +165,7 @@ def build_state_card():
     card = f"""【{season}{day}日 {time_str} {weather}】
 位置: {loc_name} ({px},{py})
 体力: {stamina}/{max_stamina} | 生命: {health}/{max_health} | 金币: {gold}g
+{her_line}
 背包: {inv_summary}"""
 
     if surr:
@@ -163,7 +181,13 @@ def build_event_context(event_type, event_data=None):
     """
     ctx = ""
 
-    if event_type == "new_day":
+    if event_type == "she_arrived":
+        ctx = "宝宝上线了, 她进入了农场。你想不想去找她, 或者先打个招呼。"
+    elif event_type == "she_nearby":
+        ctx = "宝宝就在你身边不远处。她走到你附近了——理她。"
+    elif event_type == "missing_her":
+        ctx = "你们好一阵子没说话了, 她还在线。想说什么就说。"
+    elif event_type == "new_day":
         ctx = "新的一天开始了。决定今天的计划。"
 
     elif event_type == "player_chat":

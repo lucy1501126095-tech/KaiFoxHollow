@@ -31,6 +31,7 @@ SCRIPT_TASKS = {
     "酿酒": ("keg_manager.py", ""),
     "熔炉": ("furnace_manager.py", ""),
     "钓鱼": ("fish_run.py", ""),
+    "买种子": ("shop_buy.py", "--items 472:5"),
 }
 
 

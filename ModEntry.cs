@@ -1161,8 +1161,20 @@ public class ModEntry : Mod
                 timeOfDay = Game1.timeOfDay,
                 dayOfMonth = Game1.dayOfMonth,
                 season = Game1.currentSeason,
-                year = Game1.year
+                year = Game1.year,
+                weather = Game1.isLightning ? "Storm" : Game1.isRaining ? "Rain"
+                        : Game1.isSnowing ? "Snow" : Game1.isDebrisWeather ? "Wind" : "Sun"
             },
+            farmers = Game1.getOnlineFarmers()
+                .Where(f => f.UniqueMultiplayerID != farmer.UniqueMultiplayerID)
+                .Select(f => new
+                {
+                    name = f.Name,
+                    x = f.TilePoint.X,
+                    y = f.TilePoint.Y,
+                    location = f.currentLocation?.Name ?? "?"
+                })
+                .ToList(),
             activeMenu = menuInfo,
             activeEvent = eventInfo,
             npcs,
