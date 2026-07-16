@@ -114,6 +114,31 @@ def execute_simple(instruction, port=7842):
         api.warp("Mine")
         return True, {"ok": True, "action": "warp Mine"}
 
+    if "吃东西" in instruction or "吃饭" in instruction or "吃点" in instruction:
+        r = requests.post(f"{api.BASE_URL}/eat", json={}, timeout=10).json()
+        if r.get("ok"):
+            return True, {"ok": True,
+                "action": f"ate {r.get('ate')}, stamina {r.get('staminaBefore')}->{r.get('staminaAfter')}"}
+        return True, {"ok": False, "error": "背包里没有能吃的东西, 得先搞点食物(鱼可以吃, 酒馆也卖吃的)"}
+
+    if "存东西" in instruction or "存箱子" in instruction or "放箱子" in instruction:
+        try:
+            s = api.state()
+            surr = api.surroundings(radius=10)
+        except Exception as e:
+            return True, {"ok": False, "error": f"看不清周围: {e}"}
+        chest = None
+        for t in (surr.get("tiles") or []):
+            if "Chest" in str(t.get("objName") or ""):
+                chest = t
+                break
+        if not chest:
+            return True, {"ok": False, "error": "附近10格内没有箱子, 先走到箱子旁边(小屋里有一个)"}
+        r = requests.post(f"{api.BASE_URL}/store",
+                          json={"x": chest.get("x"), "y": chest.get("y"), "keepTools": True},
+                          timeout=15).json()
+        return True, {"ok": bool(r.get("ok")), **({k: v for k, v in r.items() if k != "ok"})}
+
     if "睡觉" in instruction or "上床" in instruction:
         try:
             _s = api.state()

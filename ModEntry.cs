@@ -758,6 +758,7 @@ public class ModEntry : Mod
                 "/heal" => HandleHeal(),
                 "/ripen" => HandleRipen(ctx),
                 "/sell" => HandleSell(ctx),
+                "/eat" => HandleEat(),
                 "/harvest" => HandleHarvest(ctx),
                 "/store" => HandleStore(ctx),
                 "/chest" => HandleChest(ctx),
@@ -2298,6 +2299,40 @@ public class ModEntry : Mod
             tcs.SetResult(new { ok = true, harvested = count });
         });
         return tcs.Task.GetAwaiter().GetResult();
+    }
+
+    private object HandleEat()
+    {
+        if (!Context.IsWorldReady)
+            throw new InvalidOperationException("World not ready");
+
+        var tcs = new TaskCompletionSource<object>();
+        EnqueueMainThread(() =>
+        {
+            var farmer = Game1.player;
+            StardewValley.Object? food = null;
+            foreach (var item in farmer.Items)
+            {
+                if (item is StardewValley.Object o && o.Edibility > 0)
+                {
+                    food = o;
+                    break;
+                }
+            }
+            if (food == null)
+            {
+                tcs.SetResult(new { ok = false, error = "backpack has no edible food" });
+                return;
+            }
+            float before = farmer.Stamina;
+            farmer.eatObject(food, true);
+            food.Stack--;
+            if (food.Stack <= 0)
+                farmer.removeItemFromInventory(food);
+            tcs.SetResult(new { ok = true, ate = food.Name,
+                staminaBefore = (int)before, staminaAfter = (int)farmer.Stamina });
+        });
+        return tcs.Task.Result;
     }
 
     private object HandleSell(HttpListenerContext ctx)
